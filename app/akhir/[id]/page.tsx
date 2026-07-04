@@ -2,11 +2,11 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, Footprints, Lock, RotateCcw, Share2 } from 'lucide-react'
-import { getStory, listStories } from '@/lib/api/server'
+import { getStory, listStoryIds } from '@/lib/api/server'
 
 export async function generateStaticParams() {
-  const stories = await listStories()
-  return stories.map((s) => ({ id: s.id }))
+  const ids = await listStoryIds()
+  return ids.map((id) => ({ id }))
 }
 
 export default async function AkhirCeritaPage({

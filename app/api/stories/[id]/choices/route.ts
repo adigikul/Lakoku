@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { queryChoiceOutcome } from '@/lib/api/queries'
+import { queryChoiceOutcome, queryChapter } from '@/lib/api/queries'
+import { applyChoiceToUserState } from '@/lib/api/user-state'
 
 /**
  * POST /api/stories/[id]/choices
@@ -33,6 +34,13 @@ export async function POST(
         { status: 404 },
       )
     }
+
+    // Catat ke reader-state per-user (no-op untuk tamu; RLS pemilik-saja).
+    const chapter = await queryChapter(id, chapterNumber)
+    const decision =
+      chapter?.choices?.find((c) => c.id === choiceId)?.label ?? choiceId
+    await applyChoiceToUserState(id, chapterNumber, decision, outcome)
+
     return NextResponse.json({ outcome })
   } catch {
     return NextResponse.json({ error: 'Gagal memproses pilihan.' }, { status: 500 })

@@ -1,10 +1,10 @@
 import { notFound, redirect } from 'next/navigation'
-import { getStory, getChapter, listStories } from '@/lib/api/server'
+import { getStory, getChapter, listStoryIds } from '@/lib/api/server'
 import { ReaderView } from '@/components/reader-view'
 
 export async function generateStaticParams() {
-  const stories = await listStories()
-  return stories.map((s) => ({ id: s.id }))
+  const ids = await listStoryIds()
+  return ids.map((id) => ({ id }))
 }
 
 export default async function BacaPage({

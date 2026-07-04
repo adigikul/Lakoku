@@ -4,27 +4,53 @@
  * Dipakai oleh Server Components / route handlers. Kontraknya identik dengan
  * lib/api/client.ts (sisi browser) — dua pintu, satu kontrak (lib/api/types.ts).
  *
- * Implementasi saat ini: query langsung ke Supabase (konten published).
+ * Konten published: query anon ke Supabase (publik by RLS).
+ * Reader-state: untuk user login, state per-user (reader_states, RLS
+ * pemilik-saja) MENIMPA kolom demo global di stories. Tamu memakai state demo.
+ *
  * Saat migrasi ke Cloudflare Workers, file ini tinggal diganti menjadi
  * fetch() ke Workers — komponen tidak berubah.
  */
 import 'server-only'
 import type { StorySummary, StoryDetail, Chapter } from './types'
 import { queryStories, queryStory, queryChapter } from './queries'
+import { getReaderStates, getReaderState, type ReaderState } from './user-state'
 
-/** Daftar seluruh cerita (ringkasan) untuk katalog/beranda/koleksiku. */
-export async function listStories(): Promise<StorySummary[]> {
-  return queryStories()
+function overlay<T extends StorySummary>(story: T, state?: ReaderState | null): T {
+  if (!state) return story
+  return {
+    ...story,
+    status: state.status,
+    currentChapter: state.currentChapter,
+    jejak: state.jejak,
+    ...(state.endingName ? { endingName: state.endingName } : {}),
+  }
 }
 
-/** Detail lengkap satu cerita berdasarkan id. */
+/**
+ * Daftar id cerita SAJA — tanpa sesi/cookies. Khusus untuk
+ * generateStaticParams (build time, tidak ada request context).
+ */
+export async function listStoryIds(): Promise<string[]> {
+  const stories = await queryStories()
+  return stories.map((s) => s.id)
+}
+
+/** Daftar seluruh cerita (ringkasan), dengan state per-user bila login. */
+export async function listStories(): Promise<StorySummary[]> {
+  const [stories, states] = await Promise.all([queryStories(), getReaderStates()])
+  return stories.map((s) => overlay(s, states.get(s.id)))
+}
+
+/** Detail lengkap satu cerita, dengan state per-user bila login. */
 export async function getStory(id: string): Promise<StoryDetail | null> {
-  return queryStory(id)
+  const [story, state] = await Promise.all([queryStory(id), getReaderState(id)])
+  return story ? overlay(story, state) : null
 }
 
 /**
  * Ambil satu bab. Jika `chapterNumber` tidak diberikan, kembalikan
- * bab pada posisi terkini pembaca (currentChapter).
+ * bab pada posisi terkini pembaca (per-user bila login, demo bila tamu).
  */
 export async function getChapter(
   storyId: string,
@@ -32,7 +58,7 @@ export async function getChapter(
 ): Promise<Chapter | null> {
   let target = chapterNumber
   if (target == null) {
-    const story = await queryStory(storyId)
+    const story = await getStory(storyId)
     if (!story) return null
     target = story.currentChapter
   }

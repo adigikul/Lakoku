@@ -4,11 +4,11 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, Footprints } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { ResumeChapter } from '@/components/resume-chapter'
-import { getStory, listStories } from '@/lib/api/server'
+import { getStory, listStoryIds } from '@/lib/api/server'
 
 export async function generateStaticParams() {
-  const stories = await listStories()
-  return stories.map((s) => ({ id: s.id }))
+  const ids = await listStoryIds()
+  return ids.map((id) => ({ id }))
 }
 
 export default async function CeritaDetailPage({
