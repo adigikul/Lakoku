@@ -1,7 +1,7 @@
 # Lakoku — Progress Checklist (Task Tracker) v1.0
 
 **Status:** Living document — dicentang seiring pekerjaan berjalan
-**Last updated:** 5 Juli 2026
+**Last updated:** 5 Juli 2026 (T6W.3 & T6W.4 ditutup: progress lokal monotonic + guard anti double-advance)
 **Turunan dari:** `docs/IMPLEMENTATION_PLAN.md` (runbook v1.0) — jika runbook berubah, sinkronkan checklist ini di PR yang sama (anti-drift, runbook §5)
 **Cara pakai:** Setiap task = satu checkbox. Centang HANYA bila Definition of Done (DoD) task terpenuhi. Milestone dianggap selesai hanya bila blok Sign-off-nya lengkap (lihat runbook §4).
 
@@ -21,7 +21,7 @@
 | M3 — Memory hierarchy + Layer A + alias | `[ ]` | Belum ada `packages/narrative-core` |
 | M4 — Template + provider gateway | `[ ]` | Belum ada `packages/ai-gateway` |
 | M5 — Reconciliation + thread + Layer B | `[ ]` | Gate 50 bab; belum dimulai |
-| **M6-WEB — Web reader mobile-first** | `[~]` | **Jalur UX (fixtures) hampir tuntas**; jalur cerita nyata menunggu M5 |
+| **M6-WEB — Web reader mobile-first** | `[~]` | **Jalur UX (fixtures) hampir tuntas** — T6W.2/3/5 ✔, tersisa lint gate (butuh M0); jalur cerita nyata menunggu M5 |
 | M6 — Android reader beta | `[ ]` | Client kedua; belum dimulai |
 | M7 — Story Foundation + opening + reports | `[ ]` | Belum dimulai |
 | M8 — Observability + alert + entitlement | `[ ]` | Belum dimulai |
@@ -84,12 +84,16 @@
   - Catatan: sudah ada di root (`app/`, `components/app-shell.tsx`), belum dipindah ke `apps/web` sesuai ARCH §5. Deviasi struktur monorepo (lihat M0/M1).
 - [x] **T6W.2 Client-data seam `lib/api/`** — `types.ts`, `client.ts` (`listStories`/`getStory`/`getChapter`/`submitChoice`), fixtures internal terpisah dari UI; tak ada komponen yang impor sumber data langsung; ganti `client.ts` → Reader API tak sentuh komponen.
   - Catatan: konsistensi tipe dengan `packages/contracts` (ARCH §11.1) belum bisa diverifikasi karena `packages/contracts` belum ada (M1). Verifikasi ulang saat M1 selesai.
-- [~] **T6W.3 Reader + progress** — reader menampilkan bab sesuai cerita (bukan sample statis); loading state pakai bahasa naratif.
-  - Catatan: reader per-bab + jejak pilihan sudah jalan di atas fixtures. Progress monotonic lintas sesi (persist) belum diverifikasi penuh.
+- [x] **T6W.3 Reader + progress** — reader menampilkan bab sesuai cerita (bukan sample statis); loading state pakai bahasa naratif; progress monotonic yang persist lintas sesi.
+  - Progress lokal: `lib/api/progress.ts` (cache client, monotonic, aman SSR) + `components/resume-chapter.tsx` (`useSyncExternalStore`, surface di beranda hero & CTA detail). Reader mencatat bab saat dibuka & saat maju.
+  - Verifikasi browser (iPhone 14): pilih di `pesan-terakhir` bab 12 → `localStorage lakoku:progress:v1 = {"pesan-terakhir":13,...}`; beranda hero berubah "BAB 12 → BAB 13 DARI 50". Monotonic (hanya maju).
+  - Catatan: cache lokal ini BUKAN sumber kebenaran; saat Reader API nyata siap, progres server direkonsiliasi (ambil terjauh) — ARCH §7.1.
 - [~] **T6W.4 Choice submission + recovery + generation status** — via `submitChoice`; konsekuensi & bab berikutnya dari outcome seam.
-  - Catatan: happy-path pilihan → konsekuensi → lanjut sudah jalan. Pending-choice recovery & anti double-advance yang sebenarnya bergantung server nyata (M2/T2.1) — belum teruji end-to-end.
+  - [x] Anti double-advance (client): guard `submittingRef` di `reader-view.tsx` — tap ganda tidak mengirim `submitChoice` lebih dari sekali. Happy-path pilihan → konsekuensi → lanjut terverifikasi di browser.
+  - [ ] Pending-choice recovery yang otoritatif (resume setelah app mati saat generasi berjalan) — bergantung server nyata + generation lease (M2/T2.1); belum bisa diuji tanpa backend.
 - [x] **T6W.5 Verifikasi browser mobile** — alur beranda → baca → pilih → konsekuensi → lanjut lolos; type-check hijau (agent-browser, viewport mobile).
-- [ ] **Exit Criteria M6-WEB (jalur UX)** — reader web E2E lolos dengan fixtures; seam terpasang tanpa kebocoran; brand guard lolos. (mendekati; tinggal konfirmasi progress persist & lint gate)
+- [~] **Exit Criteria M6-WEB (jalur UX)** — reader web E2E lolos dengan fixtures; seam terpasang tanpa kebocoran; brand guard lolos; progress monotonic persist ✔; `tsc --noEmit` hijau ✔.
+  - Tersisa: **lint gate** belum bisa dijalankan — `next lint` dihapus di Next.js 16 & belum ada `eslint.config.js` (bagian M0/T0.2). Setup ESLint flat config ditunda ke M0; setelah itu jalankan lint dan tutup baris ini.
 - [ ] **Exit Criteria M6-WEB (jalur cerita nyata)** — `client.ts` menunjuk Reader API nyata DAN M5 hijau. (terkunci M5)
 
 ## M6 — Android Reader Beta (client kedua)

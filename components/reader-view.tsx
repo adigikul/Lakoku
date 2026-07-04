@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Settings2, Flag, Minus, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { submitChoice, type StoryDetail, type Chapter } from '@/lib/api'
+import { submitChoice, recordChapterReached, type StoryDetail, type Chapter } from '@/lib/api'
 
 type ReaderTheme = 'ink' | 'cream'
 type Phase = 'reading' | 'processing' | 'consequence'
@@ -17,12 +17,26 @@ export function ReaderView({ story, chapter }: { story: StoryDetail; chapter: Ch
   const [consequence, setConsequence] = useState<string[]>([])
   const [nextChapterNumber, setNextChapterNumber] = useState<number | null>(null)
   const [isEnding, setIsEnding] = useState(false)
+  // Guard anti double-advance: cegah pilihan terkirim lebih dari sekali
+  // (mis. tap ganda) sebelum state processing sempat merender ulang.
+  const submittingRef = useRef(false)
 
   const isCream = theme === 'cream'
 
+  // Catat bahwa bab ini telah dibuka (progres lokal, monotonic).
+  useEffect(() => {
+    recordChapterReached(story.id, chapter.number)
+  }, [story.id, chapter.number])
+
   async function chooseOption(id: string) {
+    if (submittingRef.current) return
+    submittingRef.current = true
     setPhase('processing')
     const outcome = await submitChoice(story.id, chapter.number, id)
+    // Bila cerita berlanjut, tandai bab berikutnya sudah terbuka (monotonic).
+    if (!outcome.isEnding && outcome.nextChapterNumber != null) {
+      recordChapterReached(story.id, outcome.nextChapterNumber)
+    }
     // Beri jeda naratif singkat sebelum menampilkan konsekuensi.
     setTimeout(() => {
       setConsequence(outcome.consequence)

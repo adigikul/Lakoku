@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { AppShell } from '@/components/app-shell'
 import { StoryCard } from '@/components/story-card'
+import { ResumeChapter } from '@/components/resume-chapter'
 import { listStories } from '@/lib/api'
 import { Play } from 'lucide-react'
 
@@ -42,7 +43,9 @@ export default async function BerandaPage() {
               </div>
               <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 p-6">
                 <span className="w-fit rounded-full bg-primary/20 px-3 py-1 text-[11px] font-semibold tracking-wide text-primary backdrop-blur">
-                  CERITA BERJALAN — BAB {berjalan.currentChapter} DARI {berjalan.totalChapters}
+                  CERITA BERJALAN — BAB{' '}
+                  <ResumeChapter storyId={berjalan.id} fallback={berjalan.currentChapter} /> DARI{' '}
+                  {berjalan.totalChapters}
                 </span>
                 <h3 className="font-serif text-3xl leading-tight text-cream text-balance">
                   {berjalan.title}

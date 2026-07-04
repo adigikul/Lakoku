@@ -9,3 +9,9 @@ export {
   getChapter,
   submitChoice,
 } from './client'
+export {
+  getLocalProgress,
+  recordChapterReached,
+  getResumeChapter,
+  subscribeProgress,
+} from './progress'
