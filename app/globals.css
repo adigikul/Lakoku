@@ -1,0 +1,136 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  /* Lakoku brand tokens */
+  --color-ink: var(--ink);
+  --color-plum: var(--plum);
+  --color-rose: var(--rose);
+  --color-gold: var(--gold);
+  --color-cream: var(--cream);
+  --color-mauve: var(--mauve);
+  --color-lavender: var(--lavender);
+
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --font-serif: var(--font-dm-serif), Georgia, serif;
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Lakoku core palette */
+  --ink: #191319;
+  --plum: #3d1f3d;
+  --rose: #c94967;
+  --gold: #d5a45c;
+  --cream: #fff7ee;
+  --mauve: #e8dce8;
+  --lavender: #96899a;
+
+  /* Semantic tokens — Midnight Drama (dark-first) */
+  --background: #191319;
+  --foreground: #fff7ee;
+  --card: #241a26;
+  --card-foreground: #fff7ee;
+  --popover: #241a26;
+  --popover-foreground: #fff7ee;
+  --primary: #c94967;
+  --primary-foreground: #fff7ee;
+  --secondary: #3d1f3d;
+  --secondary-foreground: #e8dce8;
+  --muted: #2b1f2c;
+  --muted-foreground: #96899a;
+  --accent: #d5a45c;
+  --accent-foreground: #191319;
+  --destructive: #c94949;
+  --border: rgba(232, 220, 232, 0.12);
+  --input: rgba(232, 220, 232, 0.16);
+  --ring: #c94967;
+  --radius: 1rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Reader light theme (Paper Cream) */
+.reader-cream {
+  color-scheme: light;
+  --background: #fff7ee;
+  --foreground: #2b2130;
+  --card: #fdf1e3;
+  --card-foreground: #2b2130;
+  --muted: #f3e8da;
+  --muted-foreground: #7d6f80;
+  --border: rgba(61, 31, 61, 0.14);
+}
+
+@keyframes lk-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lk-fade-up {
+  animation: lk-fade-up 240ms ease-out both;
+}
+
+@keyframes lk-pulse-soft {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.lk-pulse-soft {
+  animation: lk-pulse-soft 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-fade-up,
+  .lk-pulse-soft {
+    animation: none;
+  }
+}
