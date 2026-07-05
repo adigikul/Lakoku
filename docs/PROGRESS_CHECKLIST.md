@@ -1,7 +1,7 @@
 # Lakoku — Progress Checklist (Task Tracker) v1.0
 
 **Status:** Living document — dicentang seiring pekerjaan berjalan
-**Last updated:** 5 Juli 2026 (M3 Memory Hierarchy + Layer A + Alias interim: 12 tabel canon naratif RLS deny-default, alias resolver, context compiler T0–T3 + budget + load-bearing protection, Layer A 8-cek deterministik — simulasi fixture 50 bab + uji negatif 13/13 hijau, tsc & lint hijau)
+**Last updated:** 5 Juli 2026 (M4 Template+Gateway & M5 Reconciliation+Thread+Layer B interim: `lib/ai-gateway` (schema Zod, provider deterministik, gateway consumer-safe, repair 2-lapis), template `lakoku_drama_bangkit_v1`, `lib/narrative/{threads,layer-b,reconciliation}` — M4 harness 27/27, soak M5 3 jalur×50 bab 236/236 (0 CRITICAL), tsc & lint hijau. Konten AI nyata ke pembaca masih ditahan sampai runtime workflow M6)
 **Turunan dari:** `docs/IMPLEMENTATION_PLAN.md` (runbook v1.0) — jika runbook berubah, sinkronkan checklist ini di PR yang sama (anti-drift, runbook §5)
 **Cara pakai:** Setiap task = satu checkbox. Centang HANYA bila Definition of Done (DoD) task terpenuhi. Milestone dianggap selesai hanya bila blok Sign-off-nya lengkap (lihat runbook §4).
 
@@ -19,8 +19,8 @@
 | M1 — Contracts + DB + RLS | `[~]` | Supabase terhubung; skema reader-path + RLS read publik + seed; **auth + `reader_states` per-user RLS pemilik-saja hidup**. `packages/contracts`/`db` & domain naratif ARCH §13.1 belum |
 | M2 — Runtime lifecycle + fake gen E2E | `[~]` | Runtime interim di app Next.js (`lib/runtime/`) + RPC atomik Postgres: event log, idempotency, lease, publish_chapter, fake gen E2E, ETag. Harness invariant hijau. Struktur `packages/runtime` (monorepo) belum |
 | M3 — Memory hierarchy + Layer A + alias | `[~]` | narrative-core interim di `lib/narrative/` + 12 tabel canon (RLS deny-default): alias resolver, context compiler T0–T3 + budget + load-bearing protection, Layer A (8 cek). Simulasi 50 bab + 8 cek negatif hijau (13/13). Struktur `packages/narrative-core` (monorepo) belum |
-| M4 — Template + provider gateway | `[ ]` | Belum ada `packages/ai-gateway` |
-| M5 — Reconciliation + thread + Layer B | `[ ]` | Gate 50 bab; belum dimulai |
+| M4 — Template + provider gateway | `[~]` | `lib/ai-gateway/` (schema Zod plan/draft, provider deterministik, gateway consumer-safe, repair loop) + template `lakoku_drama_bangkit_v1`. Harness 27/27 hijau. Adapter masih fake (AI nyata M6); struktur `packages/ai-gateway` (monorepo) belum |
+| M5 — Reconciliation + thread + Layer B | `[~]` | `lib/narrative/{threads,layer-b,reconciliation}` + repair 2-lapis di `generate.ts`; skema thread diselaraskan (PAYOFF_DUE + flag stale). Soak 3 jalur×50 bab 236/236, 0 CRITICAL. Validator gate ✔; penyalaan penyajian AI ke pembaca menunggu runtime workflow M6 |
 | **M6-WEB — Web reader mobile-first** | `[~]` | **Jalur UX (fixtures) TUNTAS** — Exit Criteria jalur UX ✔ (lint+tsc hijau); jalur cerita nyata menunggu M5 |
 | M6 — Android reader beta | `[ ]` | Client kedua; belum dimulai |
 | M7 — Story Foundation + opening + reports | `[ ]` | Belum dimulai |

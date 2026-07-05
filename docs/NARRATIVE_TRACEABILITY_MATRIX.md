@@ -28,10 +28,10 @@ Kolom: **Gap** (NCS) · **Requirement** · **Skema DB** · **Runtime/Validator**
 
 | ID | Requirement | Skema DB | Runtime/Validator | Fixture | Metrik | Release gate | Status |
 |---|---|---|---|---|---|---|---|
-| G1-VERSION | Blueprint versioned, bukan overwrite | `chapter_blueprints.version`, `.reconciled_from_version`, `.reconciliation_reason`; event `BLUEPRINT_RECONCILED` | Reconciliation step (WF step R) | drift fixture (Bab 20) | — | ARCH §18.3 soak | TODO |
-| G1-DRIFT | Drift score goal-vs-state; ≥2 → regenerate goal | — | WF step 3 (validate plan) | drift fixture | `review_required_rate` | soak | TODO |
-| G1-REACH | Ending reachability check tiap checkpoint | `ending_rules` | Reconciliation step | soak 3 jalur | "semua ending reachable" (NCS §8.3) | soak | TODO |
-| G1-SPINE | Reconciliation tak boleh langgar spine/reveal gate/ending | spine layer immutable | WF step R hard rule; ARCH rule #17 | drift fixture | 0 pelanggaran spine | soak | TODO |
+| G1-VERSION | Blueprint versioned, bukan overwrite | `chapter_blueprints.version`, `.reconciled_from_version`, `.reconciliation_reason`; event `BLUEPRINT_RECONCILED` | Reconciliation step (WF step R) | drift fixture (Bab 20) | — | ARCH §18.3 soak | IN_PROGRESS (`lib/narrative/reconciliation.ts`: regen → version++ + reconciledFromVersion/Reason + event `BLUEPRINT_RECONCILED`; kolom `chapter_blueprints` ada. Terbukti di soak `m5-soak.ts`. Soak runtime nyata nunggu M6) |
+| G1-DRIFT | Drift score goal-vs-state; ≥2 → regenerate goal | — | WF step 3 (validate plan) | drift fixture | `review_required_rate` | soak | IN_PROGRESS (`computeDriftScore()` 0–3 atas ActualState; ≥2 → regen goal versi baru. Terbukti di soak. Metrik `review_required_rate` runtime nunggu M6) |
+| G1-REACH | Ending reachability check tiap checkpoint | `ending_rules` | Reconciliation step | soak 3 jalur | "semua ending reachable" (NCS §8.3) | soak | IN_PROGRESS (`checkEndingReachability()` di tiap act gate; unreachable → FAILED_REVIEW_REQUIRED. Soak 3 jalur×50 bab semua reachable) |
+| G1-SPINE | Reconciliation tak boleh langgar spine/reveal gate/ending | spine layer immutable | WF step R hard rule; ARCH rule #17 | drift fixture | 0 pelanggaran spine | soak | IN_PROGRESS (`checkSpineIntegrity()` tolak hapus mandatory reveal / majukan reveal gate → 0 pelanggaran di soak. Integrasi WF step R runtime nunggu M6) |
 
 ### G2 — Memory Compaction & Context Budget (NCS §2)
 
@@ -46,7 +46,7 @@ Kolom: **Gap** (NCS) · **Requirement** · **Skema DB** · **Runtime/Validator**
 | ID | Requirement | Skema DB | Runtime/Validator | Fixture | Metrik | Release gate | Status |
 |---|---|---|---|---|---|---|---|
 | G3-LAYERA | Cek deterministik (tanpa LLM): karakter hidup/terdaftar, no reveal pre-gate, knowledge scope, state delta ⊆ allowed, timeline, struktur bab, alias, karakter baru >Bab30 | `characters`, `character_states`, `secrets_reveals`, `knowledge_scopes`, `timeline_events`, `character_aliases` | WF step 6 Layer A | seeded contradiction, prohibited early reveal | `continuity_critical_rate` per bab | ARCH §18.3 | IN_PROGRESS (`lib/narrative/layer-a.ts` 8 cek lengkap; skema canon ada; harness `narrative-layer-a.ts` 13/13 hijau termasuk seeded contradiction & early reveal. Integrasi WF step 6 & metrik dashboard nunggu M4/M5) |
-| G3-LAYERB | Cek berbasis model: kontradiksi lunak, voice, emosi vs relationship | `character_voice_sheets` | WF step 6 Layer B | voice fixture | `continuity_critical_rate` | soak | TODO |
+| G3-LAYERB | Cek berbasis model: kontradiksi lunak, voice, emosi vs relationship | `character_voice_sheets` | WF step 6 Layer B | voice fixture | `continuity_critical_rate` | soak | IN_PROGRESS (`lib/narrative/layer-b.ts`: VOICE_FORBIDDEN_WORD / SOFT_CONTRADICTION / EMOTION_RELATIONSHIP_MISMATCH, pakai `character_voice_sheets` + relationship score. Terbukti di soak + uji negatif. Validator model NYATA (LLM) nunggu M6) |
 | G3-REPAIR | Maks 2 repair/lapis → `FAILED_REVIEW_REQUIRED`; repair tak hapus canon | — | WF step 8 | retry fixture | `repair_success_rate` | soak | TODO |
 | G3-METRICS | Dashboard + alert monotonic | — | Observability (ARCH §17.3/§17.4) | — | `continuity_critical_rate`, `reader_inconsistency_report_rate` | beta gate (PRD §5.3) | TODO |
 
@@ -54,10 +54,10 @@ Kolom: **Gap** (NCS) · **Requirement** · **Skema DB** · **Runtime/Validator**
 
 | ID | Requirement | Skema DB | Runtime/Validator | Fixture | Metrik | Release gate | Status |
 |---|---|---|---|---|---|---|---|
-| G4-STATUS | `OPEN→DEVELOPING→PAYOFF_DUE→RESOLVED\|ABANDONED_APPROVED` | `story_threads.status`, `.payoff_window` | WF step 2 & step 9 | thread fixture | thread staleness | soak | TODO |
-| G4-BUDGET | Maks 7 thread aktif; no new thread ≥ Bab 41 | — | WF step 2 (plan) | thread fixture | — | soak | TODO |
-| G4-STALE | Stale 6 bab → wajib callback ≤ 3 bab | — | Validator/planner | thread fixture | thread staleness | soak | TODO |
-| G4-BLOCK48 | Publish Bab 48 diblokir bila mystery utama non-RESOLVED | `story_threads.status` | Deterministic check (Layer A) | Bab 48 unresolved fixture | — | soak | TODO |
+| G4-STATUS | `OPEN→DEVELOPING→PAYOFF_DUE→RESOLVED\|ABANDONED_APPROVED` | `story_threads.status`, `.payoff_window` | WF step 2 & step 9 | thread fixture | thread staleness | soak | IN_PROGRESS (`lib/narrative/threads.ts` `transitionThread` tolak transisi ilegal; skema `story_threads.status` diselaraskan (migrasi `thread_lifecycle_align_m5`). Terbukti di soak. Wiring WF step 2/9 runtime nunggu M6) |
+| G4-BUDGET | Maks 7 thread aktif; no new thread ≥ Bab 41 | — | WF step 2 (plan) | thread fixture | — | soak | IN_PROGRESS (`THREAD_BUDGET_EXCEEDED` maks 7 + `THREAD_NEW_FORBIDDEN` ≥ Bab 41. Terbukti di soak + uji negatif) |
+| G4-STALE | Stale 6 bab → wajib callback ≤ 3 bab | — | Validator/planner | thread fixture | thread staleness | soak | IN_PROGRESS (`refreshStaleness` flag stale (kolom `stale`/`stale_since_chapter`) + `THREAD_STALE_UNADDRESSED` callback ≤ 3 bab. Terbukti di soak) |
+| G4-BLOCK48 | Publish Bab 48 diblokir bila mystery utama non-RESOLVED | `story_threads.status` | Deterministic check (Layer A) | Bab 48 unresolved fixture | — | soak | IN_PROGRESS (`MAIN_MYSTERY_UNRESOLVED_AT_48` CRITICAL memblokir. Terbukti di soak + uji negatif. Wiring publish runtime nunggu M6) |
 
 ### G5 — Entity Canonicalization & Voice (NCS §5)
 
