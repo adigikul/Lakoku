@@ -1,38 +1,58 @@
 /**
- * Orkestrasi generasi satu bab: plan → write → Layer A → repair.
+ * Orkestrasi generasi satu bab: plan → write → Layer A → Layer B → repair.
  *
  * Repair protocol (NCS §3.2):
  *   - CRITICAL memblokir publish; MAJOR masuk repair; MINOR hanya dicatat.
- *   - Maksimal 2 repair attempt; setelah itu FAILED_REVIEW_REQUIRED.
+ *   - Maksimal 2 repair attempt PER LAPIS; setelah itu FAILED_REVIEW_REQUIRED.
  *   - Repair hanya merevisi draft (memanggil writeChapter dengan findings),
  *     TIDAK PERNAH memutasi/menghapus canon snapshot.
+ *
+ * Dua lapis validasi (NCS §3.1):
+ *   - Lapis A (deterministik): validateLayerA + thread lifecycle (G4) + gate Bab 48.
+ *   - Lapis B (model): kontradiksi lunak, voice, emosi vs relationship.
  */
 
-import type { CanonSnapshot, ChapterBlueprint, Finding } from '../narrative/types'
+import type {
+  CanonSnapshot,
+  ChapterBlueprint,
+  Finding,
+  StoryThread,
+} from '../narrative/types'
 import { validateLayerA } from '../narrative/layer-a'
+import { validateLayerB, type LayerBContext } from '../narrative/layer-b'
+import {
+  validateThreadLifecycle,
+  checkChapter48Block,
+} from '../narrative/threads'
 import { generatePlan, writeChapter, type GatewayDeps } from './gateway'
 import type { ChapterDraftParsed } from './schemas'
 import type { DraftDefect } from './provider'
 
-export const MAX_REPAIR_ATTEMPTS = 2 // per lapis (Layer A)
+export const MAX_REPAIR_ATTEMPTS = 2 // per lapis
 
 export type GenerationStatus = 'PUBLISHED' | 'FAILED_REVIEW_REQUIRED'
+
+/** Konteks thread untuk lifecycle check (state hidup di canon/state, bukan draft). */
+export interface ThreadContext {
+  threads: StoryThread[]
+  advancedThreadIds: string[]
+  opensNewThread?: boolean
+}
 
 export interface GenerationResult {
   status: GenerationStatus
   chapterNumber: number
   draft: ChapterDraftParsed | null
-  attempts: number // jumlah repair attempt yang dijalankan
-  findings: Finding[] // findings tersisa di akhir (untuk audit)
+  attempts: number // total repair attempt (lapis A + B)
+  findings: Finding[] // findings tersisa di akhir (audit)
   reason?: string
+  failedLayer?: 'A' | 'B'
 }
 
-/** Findings yang menuntut repair: CRITICAL atau MAJOR (MINOR hanya dicatat). */
 function needsRepair(findings: Finding[]): boolean {
   return findings.some((f) => f.severity === 'CRITICAL' || f.severity === 'MAJOR')
 }
 
-/** Snapshot dianggap tak-boleh-berubah selama generasi; kunci audit sederhana. */
 function canonFingerprint(s: CanonSnapshot): string {
   return JSON.stringify({
     c: s.characters.map((c) => c.id).sort(),
@@ -42,6 +62,28 @@ function canonFingerprint(s: CanonSnapshot): string {
   })
 }
 
+/** Lapis A deterministik: Layer A + thread lifecycle + gate Bab 48. */
+function runLayerA(
+  snapshot: CanonSnapshot,
+  draft: ChapterDraftParsed,
+  chapterNumber: number,
+  threadCtx?: ThreadContext,
+): Finding[] {
+  const findings = [...validateLayerA(snapshot, draft).findings]
+  if (threadCtx) {
+    findings.push(
+      ...validateThreadLifecycle({
+        threads: threadCtx.threads,
+        chapter: chapterNumber,
+        advancedThreadIds: threadCtx.advancedThreadIds,
+        opensNewThread: threadCtx.opensNewThread,
+      }),
+    )
+    findings.push(...checkChapter48Block(threadCtx.threads, chapterNumber))
+  }
+  return findings
+}
+
 export async function generateChapter(
   deps: GatewayDeps,
   args: {
@@ -49,50 +91,65 @@ export async function generateChapter(
     blueprint: ChapterBlueprint
     chapterNumber: number
     injectDefects?: DraftDefect[]
+    threadContext?: ThreadContext
+    layerBContext?: LayerBContext
   },
 ): Promise<GenerationResult> {
-  const { snapshot, blueprint, chapterNumber } = args
+  const { snapshot, blueprint, chapterNumber, threadContext, layerBContext } = args
   const fpBefore = canonFingerprint(snapshot)
 
   const plan = await generatePlan(deps, { snapshot, blueprint, chapterNumber })
 
-  // Attempt awal (bukan repair).
   let draft = await writeChapter(deps, {
     snapshot,
     plan,
     injectDefects: args.injectDefects,
   })
-  let result = validateLayerA(snapshot, draft)
   let attempts = 0
 
-  // Loop repair: hanya bila ada CRITICAL/MAJOR & kuota tersisa.
-  while (needsRepair(result.findings) && attempts < MAX_REPAIR_ATTEMPTS) {
-    attempts++
-    draft = await writeChapter(deps, {
-      snapshot,
-      plan,
-      repairFindings: result.findings, // repair hanya terima findings + context
-    })
-    result = validateLayerA(snapshot, draft)
-  }
-
-  // Jaminan: canon tidak berubah selama generasi/repair.
-  if (canonFingerprint(snapshot) !== fpBefore) {
-    throw new Error('Invariant dilanggar: canon berubah selama generasi.')
-  }
-
-  if (needsRepair(result.findings)) {
+  const fail = (
+    layer: 'A' | 'B',
+    findings: Finding[],
+  ): GenerationResult => {
+    if (canonFingerprint(snapshot) !== fpBefore) {
+      throw new Error('Invariant dilanggar: canon berubah selama generasi.')
+    }
     return {
       status: 'FAILED_REVIEW_REQUIRED',
       chapterNumber,
       draft: null,
       attempts,
-      findings: result.findings,
-      reason:
-        result.blocking && attempts >= MAX_REPAIR_ATTEMPTS
-          ? 'CRITICAL/MAJOR bertahan setelah 2 repair.'
-          : 'Findings tak terselesaikan.',
+      findings,
+      failedLayer: layer,
+      reason: `CRITICAL/MAJOR bertahan di Lapis ${layer} setelah ${MAX_REPAIR_ATTEMPTS} repair.`,
     }
+  }
+
+  // ---- Lapis A (deterministik) ----
+  let aFindings = runLayerA(snapshot, draft, chapterNumber, threadContext)
+  let aAttempts = 0
+  while (needsRepair(aFindings) && aAttempts < MAX_REPAIR_ATTEMPTS) {
+    aAttempts++
+    attempts++
+    draft = await writeChapter(deps, { snapshot, plan, repairFindings: aFindings })
+    aFindings = runLayerA(snapshot, draft, chapterNumber, threadContext)
+  }
+  if (needsRepair(aFindings)) return fail('A', aFindings)
+
+  // ---- Lapis B (model) ----
+  let bFindings = validateLayerB(snapshot, draft, layerBContext ?? {}).findings
+  let bAttempts = 0
+  while (needsRepair(bFindings) && bAttempts < MAX_REPAIR_ATTEMPTS) {
+    bAttempts++
+    attempts++
+    draft = await writeChapter(deps, { snapshot, plan, repairFindings: bFindings })
+    bFindings = validateLayerB(snapshot, draft, layerBContext ?? {}).findings
+  }
+  if (needsRepair(bFindings)) return fail('B', bFindings)
+
+  // Jaminan: canon tidak berubah selama generasi/repair.
+  if (canonFingerprint(snapshot) !== fpBefore) {
+    throw new Error('Invariant dilanggar: canon berubah selama generasi.')
   }
 
   return {
@@ -100,6 +157,6 @@ export async function generateChapter(
     chapterNumber,
     draft,
     attempts,
-    findings: result.findings, // mungkin berisi MINOR
+    findings: [...aFindings, ...bFindings], // mungkin berisi MINOR
   }
 }

@@ -67,6 +67,26 @@ const RevealAssertionSchema = z
   .object({ secretId: z.string().min(1) })
   .strict()
 
+const DialogueLineSchema = z
+  .object({ characterId: z.string().min(1), text: z.string().min(1) })
+  .strict()
+
+const EmotionBeatSchema = z
+  .object({
+    characterId: z.string().min(1),
+    targetCharacterId: z.string().min(1),
+    valence: z.enum(['warm', 'neutral', 'cold', 'hostile']),
+  })
+  .strict()
+
+const SoftClaimSchema = z
+  .object({
+    characterId: z.string().min(1),
+    factId: z.string().min(1),
+    agrees: z.boolean(),
+  })
+  .strict()
+
 export const ChapterDraftSchema = z
   .object({
     storyId: z.string().min(1),
@@ -81,6 +101,10 @@ export const ChapterDraftSchema = z
     reveals: z.array(RevealAssertionSchema).default([]),
     proposedStateDelta: z.record(z.string(), z.unknown()).default({}),
     newNamedCharacters: z.array(z.string()).default([]),
+    // Sinyal Layer B (opsional) — divalidasi validator model terpisah.
+    dialogue: z.array(DialogueLineSchema).default([]),
+    emotionBeats: z.array(EmotionBeatSchema).default([]),
+    softClaims: z.array(SoftClaimSchema).default([]),
   })
   .strict()
 

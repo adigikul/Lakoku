@@ -27,7 +27,14 @@ export interface WriteInput {
   injectDefects?: DraftDefect[]
 }
 
-export type DraftDefect = 'SHORT' | 'NO_CHOICE' | 'TOO_MANY_SCENES'
+export type DraftDefect =
+  | 'SHORT'
+  | 'NO_CHOICE'
+  | 'TOO_MANY_SCENES'
+  // Cacat Layer B (model-based) — dibersihkan saat repair.
+  | 'VOICE_BAD'
+  | 'SOFT_CONTRA'
+  | 'EMOTION_BAD'
 
 export interface GenerationProvider {
   /** Nama internal — untuk log/korelasi, tak pernah ke pembaca. */
@@ -92,6 +99,13 @@ function buildParagraphs(
 
 function countWords(paragraphs: string[]): number {
   return paragraphs.join(' ').split(/\s+/).filter(Boolean).length
+}
+
+/** Susun dialog yang sengaja melanggar voice sheet (untuk uji Layer B). */
+function forbiddenWordFor(snapshot: CanonSnapshot, characterId: string): string {
+  const sheet = snapshot.voiceSheets.find((v) => v.characterId === characterId)
+  const word = sheet?.forbiddenWords[0] ?? 'terlarang'
+  return `Terus terang, ${word} sekali situasinya.`
 }
 
 /**
@@ -169,6 +183,46 @@ export function createDeterministicProvider(): GenerationProvider {
           factId: k.factId,
         }))
 
+      // ---- Sinyal Layer B (bersih secara default; cacat hanya bila diinjeksi) ----
+      const speaker = chars[0]
+      const dialogue = speaker
+        ? [
+            {
+              characterId: speaker.id,
+              text: defects.includes('VOICE_BAD')
+                ? forbiddenWordFor(snapshot, speaker.id)
+                : 'Aku akan menghadapi ini sampai selesai.',
+            },
+          ]
+        : []
+
+      const emotionBeats =
+        chars.length >= 2
+          ? [
+              {
+                characterId: chars[0].id,
+                targetCharacterId: chars[1].id,
+                valence: (defects.includes('EMOTION_BAD') ? 'warm' : 'neutral') as
+                  | 'warm'
+                  | 'neutral'
+                  | 'cold'
+                  | 'hostile',
+              },
+            ]
+          : []
+
+      // Klaim lunak atas fakta relevan yang sudah established.
+      const relevantFact = snapshot.facts.find((f) => f.establishedChapter <= chapter)
+      const softClaims = relevantFact
+        ? [
+            {
+              characterId: chars[0]?.id ?? relevantFact.subjectCharacterId ?? 'unknown',
+              factId: relevantFact.id,
+              agrees: !defects.includes('SOFT_CONTRA'),
+            },
+          ]
+        : []
+
       return {
         storyId: snapshot.storyId,
         chapterNumber: chapter,
@@ -182,6 +236,9 @@ export function createDeterministicProvider(): GenerationProvider {
         reveals: p.usesReveals.map((secretId) => ({ secretId })),
         proposedStateDelta: p.proposedStateDelta,
         newNamedCharacters: p.introducesCharacters,
+        dialogue,
+        emotionBeats,
+        softClaims,
       }
     },
   }

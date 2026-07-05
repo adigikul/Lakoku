@@ -11,7 +11,7 @@ export type AliasType = 'NAME' | 'NICKNAME' | 'RELATION' | 'TITLE'
 export type ThreadStatus =
   | 'OPEN'
   | 'DEVELOPING'
-  | 'STALE'
+  | 'PAYOFF_DUE'
   | 'RESOLVED'
   | 'ABANDONED_APPROVED'
 
@@ -80,6 +80,9 @@ export interface StoryThread {
   lastTouchedChapter: number
   payoffWindow: number | null
   isMainMystery: boolean
+  /** Flag staleness (NCS §4.2) — terpisah dari status; thread bisa OPEN+stale. */
+  stale?: boolean
+  staleSinceChapter?: number | null
 }
 
 export interface ActRollup {
@@ -161,6 +164,38 @@ export interface ChapterDraft {
   proposedStateDelta: StateDelta
   /** character_id karakter baru yang muncul (sudah ter-resolve/bernama). */
   newNamedCharacters: string[]
+
+  // ---- Input opsional untuk Layer B (model-based checks) ----
+  /** Baris dialog dengan atribusi pembicara (uji voice sheet). */
+  dialogue?: DialogueLine[]
+  /** Beat emosi antar-karakter (uji vs relationship score). */
+  emotionBeats?: EmotionBeat[]
+  /** Klaim fakta lunak yang menyetujui/menentang fakta canon. */
+  softClaims?: SoftClaim[]
+  /** thread_id yang dimajukan/disentuh bab ini (uji lifecycle G4). */
+  advancedThreadIds?: string[]
+  /** true bila draft membuka thread naratif baru. */
+  opensNewThread?: boolean
+}
+
+export interface DialogueLine {
+  characterId: string
+  text: string
+}
+
+export type EmotionValence = 'warm' | 'neutral' | 'cold' | 'hostile'
+
+export interface EmotionBeat {
+  characterId: string
+  targetCharacterId: string
+  valence: EmotionValence
+}
+
+export interface SoftClaim {
+  characterId: string
+  factId: string
+  /** true = draft konsisten dgn fakta; false = menentang (kontradiksi lunak). */
+  agrees: boolean
 }
 
 // ---------- Findings ----------
