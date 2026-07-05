@@ -5,3 +5,4 @@
  * sehingga tak boleh masuk bundel klien. Konsumen: runtime.
  */
 export * from './select-provider'
+export { createGatewayProvider } from './gateway-provider'

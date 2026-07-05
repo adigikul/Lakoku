@@ -1,19 +1,23 @@
 import 'server-only'
 import { createDeterministicProvider } from './provider'
+import { createGatewayProvider } from './gateway-provider'
 import type { GenerationProvider } from './provider'
 
 /**
  * Seam pemilihan provider generasi (satu-satunya tempat runtime memutuskan
  * "otak" penulis). Konsumen lain hanya kenal kontrak GenerationProvider —
- * mengganti provider nyata (LLM via AI Gateway) nanti cukup di sini, tanpa
- * menyentuh workflow, compiler, atau validator.
+ * pipeline, compiler, & validator tak berubah apa pun provider yang dipakai.
  *
- * Saat ini default deterministik (tanpa LLM): jalur generasi tervalidasi sudah
- * hidup end-to-end. Ketika provider LLM tersedia, cabangkan di sini berdasarkan
- * env (mis. NARRATIVE_PROVIDER=gateway) — pipeline & boundary tetap sama.
+ * Mode (env `NARRATIVE_PROVIDER`):
+ *   - `gateway` → LLM nyata via Vercel AI Gateway (butuh AI_GATEWAY_API_KEY;
+ *     model dari `NARRATIVE_MODEL`, default openai/gpt-4.1-mini). Hanya prosa
+ *     yang dari model; metadata terstruktur tetap canon-derived (lihat
+ *     gateway-provider.ts).
+ *   - selain itu (default) → deterministik tanpa LLM (gratis, dipakai harness).
  */
 export function selectProvider(): GenerationProvider {
-  // const mode = process.env.NARRATIVE_PROVIDER
-  // if (mode === 'gateway') return createGatewayProvider()  // (M6)
+  if (process.env.NARRATIVE_PROVIDER === 'gateway') {
+    return createGatewayProvider()
+  }
   return createDeterministicProvider()
 }
