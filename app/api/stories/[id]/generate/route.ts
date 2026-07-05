@@ -55,7 +55,7 @@ export async function POST(
           : result.reason === 'CANON_MISSING'
             ? 404
             : 409
-      return NextResponse.json({ ok: false, ...result }, { status })
+      return NextResponse.json(result, { status })
     }
     return NextResponse.json(result, { status: 201 })
   } catch (err) {
