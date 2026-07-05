@@ -172,17 +172,55 @@ export function checkSpineIntegrity(
   return findings
 }
 
-/** Regenerasi goal deterministik: relaksasi requirement yang tak terpenuhi. */
-function regenerateGoal(bp: ChapterBlueprint, drift: number): ChapterBlueprint {
+/**
+ * Regenerasi goal. Bila `authoredGoal` diberikan (hasil LLM tervalidasi, T7.5),
+ * pakai sebagai chapterGoal baru; jika null, jatuh ke penanda deterministik.
+ * Spine (mandatoryBeats, forbiddenReveals) TIDAK pernah diubah di sini.
+ */
+function regenerateGoal(
+  bp: ChapterBlueprint,
+  drift: number,
+  authoredGoal?: string | null,
+): ChapterBlueprint {
+  const nextVersion = bp.version + 1
+  const authored = authoredGoal?.trim()
   return {
     ...bp,
-    version: bp.version + 1,
+    version: nextVersion,
     reconciledFromVersion: bp.version,
-    reconciliationReason: `drift=${drift} ≥ ${DRIFT_REGEN_THRESHOLD}: trajectory diselaraskan ulang dalam batas spine.`,
-    chapterGoal: `${bp.chapterGoal} [rekonsiliasi v${bp.version + 1}]`,
+    reconciliationReason: authored
+      ? `drift=${drift} ≥ ${DRIFT_REGEN_THRESHOLD}: goal ditulis ulang (adaptif) dalam batas spine.`
+      : `drift=${drift} ≥ ${DRIFT_REGEN_THRESHOLD}: trajectory diselaraskan ulang dalam batas spine.`,
+    chapterGoal: authored ? authored : `${bp.chapterGoal} [rekonsiliasi v${nextVersion}]`,
     // mandatoryBeats, forbiddenReveals (spine) TIDAK diubah.
   }
 }
+
+/**
+ * Konteks yang diberikan ke penulis-goal adaptif (T7.5). Berisi HANYA lapis
+ * trajectory + ringkasan state; spine disertakan sebagai CONSTRAINT (read-only)
+ * agar goal baru tetap menuju mandatory beats tanpa membocorkan reveal terlarang.
+ */
+export interface GoalAuthorContext {
+  storyId: string
+  chapterNumber: number
+  phase: string
+  drift: number
+  /** goal lama yang sudah melenceng dari state. */
+  currentGoal: string
+  /** spine yang WAJIB tetap dipatuhi (tak boleh diubah goal). */
+  mandatoryBeats: string[]
+  forbiddenReveals: string[]
+  /** ringkasan state aktual pembaca untuk menyelaraskan goal. */
+  activeFlags: string[]
+  availableClues: string[]
+}
+
+/**
+ * Penulis-goal adaptif (diinjeksi; opsional untuk test). Mengembalikan goal baru
+ * yang aman-pembaca, atau null bila gagal/menolak (→ fallback deterministik).
+ */
+export type GoalAuthorFn = (ctx: GoalAuthorContext) => Promise<string | null>
 
 /**
  * Jalankan reconciliation checkpoint atas blueprint act berikutnya.
@@ -237,6 +275,97 @@ export function runReconciliation(input: ReconcileInput): ReconcileResult {
     blueprints: out,
     driftByChapter,
     reconciledChapters,
+    findings,
+    events,
+  }
+}
+
+/**
+ * Varian ADAPTIF (T7.5): sama seperti runReconciliation, tapi goal bab yang
+ * drift diregenerasi oleh `goalAuthor` (LLM tervalidasi) alih-alih penanda
+ * deterministik. Bila author gagal/menolak untuk sebuah bab, jatuh ke fallback
+ * deterministik agar checkpoint tak pernah buntu. Spine & gate ending tetap
+ * ditegakkan identik dengan jalur sinkron.
+ */
+export async function runReconciliationAdaptive(
+  input: ReconcileInput,
+  goalAuthor?: GoalAuthorFn,
+): Promise<ReconcileResult & { authoredChapters: number[] }> {
+  const reqByChapter = new Map(input.requirements.map((r) => [r.chapterNumber, r]))
+  const driftByChapter: Record<number, number> = {}
+  const reconciledChapters: number[] = []
+  const authoredChapters: number[] = []
+  const events: ReconcileResult['events'] = []
+  const findings: Finding[] = []
+
+  // 1) Ending reachability WAJIB lulus lebih dulu (gate keras).
+  findings.push(...checkEndingReachability(input.endings, input.state))
+
+  // 2) Drift + regenerasi trajectory (adaptif bila ada goalAuthor).
+  const out: ChapterBlueprint[] = []
+  for (const bp of input.blueprints) {
+    const drift = computeDriftScore(reqByChapter.get(bp.chapterNumber), input.state)
+    driftByChapter[bp.chapterNumber] = drift
+    if (drift < DRIFT_REGEN_THRESHOLD) {
+      out.push(bp)
+      continue
+    }
+
+    // Coba goal adaptif; fallback deterministik bila gagal/menolak.
+    let authoredGoal: string | null = null
+    if (goalAuthor) {
+      try {
+        authoredGoal = await goalAuthor({
+          storyId: input.storyId,
+          chapterNumber: bp.chapterNumber,
+          phase: bp.phase,
+          drift,
+          currentGoal: bp.chapterGoal,
+          mandatoryBeats: bp.mandatoryBeats,
+          forbiddenReveals: bp.forbiddenReveals,
+          activeFlags: [...input.state.storyFlags],
+          availableClues: [...input.state.clues],
+        })
+      } catch (err) {
+        console.log(
+          `[v0] reconcile: goalAuthor gagal Bab ${bp.chapterNumber}, fallback deterministik:`,
+          (err as Error)?.message,
+        )
+        authoredGoal = null
+      }
+    }
+
+    const regen = regenerateGoal(bp, drift, authoredGoal)
+    findings.push(...checkSpineIntegrity(regen, input.secrets))
+    reconciledChapters.push(bp.chapterNumber)
+    if (authoredGoal?.trim()) authoredChapters.push(bp.chapterNumber)
+    events.push({
+      type: 'BLUEPRINT_RECONCILED',
+      chapterNumber: bp.chapterNumber,
+      reason: regen.reconciliationReason ?? '',
+    })
+    out.push(regen)
+  }
+
+  const hasCritical = findings.some((f) => f.severity === 'CRITICAL')
+  if (hasCritical) {
+    return {
+      status: 'FAILED_REVIEW_REQUIRED',
+      blueprints: input.blueprints,
+      driftByChapter,
+      reconciledChapters: [],
+      authoredChapters: [],
+      findings,
+      events: [],
+    }
+  }
+
+  return {
+    status: reconciledChapters.length ? 'RECONCILED' : 'NO_CHANGE',
+    blueprints: out,
+    driftByChapter,
+    reconciledChapters,
+    authoredChapters,
     findings,
     events,
   }

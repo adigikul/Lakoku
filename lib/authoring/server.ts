@@ -7,3 +7,4 @@
 export * from './brainstorm'
 export * from './model'
 export * from './persist'
+export * from './reconcile-goal'
