@@ -43,6 +43,34 @@ function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[11px] font-semibold tracking-wide text-lavender">{children}</span>
 }
 
+/**
+ * Pecah teks jadi paragraf pendek bergaya pembaca novel mobile.
+ * Utamakan jeda baris dari AI (\n\n); jika teks datang sebagai satu blok
+ * padat, pecah per kalimat lalu kelompokkan ~2 kalimat per paragraf.
+ */
+function toParagraphs(text: string): string[] {
+  const byBreak = text.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+  if (byBreak.length > 1) return byBreak
+  const sentences = (text.match(/[^.!?…]+[.!?…]+(?:["'”’)]+)?|\S[^.!?…]*$/g) ?? [text])
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const groups: string[] = []
+  for (let i = 0; i < sentences.length; i += 2) {
+    groups.push(sentences.slice(i, i + 2).join(' '))
+  }
+  return groups.length ? groups : [text]
+}
+
+function Prose({ text, className }: { text: string; className?: string }) {
+  return (
+    <div className={cn('flex flex-col gap-3', className)}>
+      {toParagraphs(text).map((para, i) => (
+        <p key={i} className="text-pretty leading-relaxed">{para}</p>
+      ))}
+    </div>
+  )
+}
+
 function Feedback({
   value,
   onChange,
@@ -274,7 +302,7 @@ export function BrainstormWizard() {
                   </div>
                   <h2 className="font-serif text-xl leading-snug text-foreground">{p.title}</h2>
                   <p className="text-xs font-medium text-primary">{p.role}</p>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{p.synopsis}</p>
+                  <Prose text={p.synopsis} className="text-sm text-muted-foreground" />
                 </button>
               ))}
             </div>
@@ -291,7 +319,7 @@ export function BrainstormWizard() {
                 <h2 className="font-serif text-2xl leading-snug text-foreground">{premise.title}</h2>
                 <p className="text-sm font-medium text-primary">{premise.tagline}</p>
                 <p className="text-xs font-medium text-muted-foreground">{premise.role}</p>
-                <p className="text-sm leading-relaxed text-foreground">{premise.synopsis}</p>
+                <Prose text={premise.synopsis} className="text-sm text-foreground" />
               </div>
               <Feedback value={feedback} onChange={setFeedback} onRegenerate={refinePremiseNow} pending={pending} placeholder="Ingin lebih gelap? Ganti latar? Tulis di sini…" />
               <div className="flex flex-col gap-2">

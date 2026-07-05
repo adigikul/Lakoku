@@ -22,7 +22,7 @@ export const PremiseSchema = z.object({
   title: z.string().min(3).max(80).describe('Judul cerita, ringkas & menggugah.'),
   tagline: z.string().min(10).max(160).describe('Satu kalimat pemikat (logline).'),
   role: z.string().min(3).max(80).describe('Peran/sudut pandang pembaca sebagai tokoh utama, mis. "Rani, sang pewaris".'),
-  synopsis: z.string().min(60).max(700).describe('Sinopsis 2–4 kalimat: dunia, luka tokoh, taruhan.'),
+  synopsis: z.string().min(60).max(700).describe('Sinopsis 3–5 kalimat pendek yang mengalir dari dunia → luka tokoh → taruhan. Gunakan kalimat pendek dan jelas (bukan kalimat majemuk panjang), agar enak dibaca di layar ponsel.'),
   tropes: z.array(z.string().min(2).max(40)).min(2).max(5).describe('2–5 trope/genre penanda.'),
 })
 export type PremiseDraft = z.infer<typeof PremiseSchema>
