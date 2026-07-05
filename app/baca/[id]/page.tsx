@@ -1,6 +1,7 @@
-import { notFound, redirect } from 'next/navigation'
-import { getStory, getChapter, listStoryIds } from '@/lib/api/server'
+import { notFound } from 'next/navigation'
+import { getStory, getChapter, getChapterAvailability, listStoryIds } from '@/lib/api/server'
 import { ReaderView } from '@/components/reader-view'
+import { ChapterUnavailable } from '@/components/chapter-unavailable'
 
 export async function generateStaticParams() {
   const ids = await listStoryIds()
@@ -24,9 +25,19 @@ export default async function BacaPage({
   const target = Number.isFinite(requested) ? requested : undefined
 
   const chapter = await getChapter(story.id, target)
-  // Bila bab yang diminta belum tersedia (konten fixtures terbatas),
-  // kembali ke halaman detail dengan anggun—jangan tampilkan error.
-  if (!chapter) redirect(`/cerita/${story.id}`)
+  // Bila bab yang diminta belum tersedia, tampilkan layar reader-safe yang tepat
+  // (sedang ditulis vs sedang dirapikan)—jangan dialihkan diam-diam ke detail.
+  if (!chapter) {
+    const targetNumber = target ?? story.currentChapter
+    const availability = await getChapterAvailability(story.id, targetNumber)
+    return (
+      <ChapterUnavailable
+        story={story}
+        chapterNumber={targetNumber}
+        state={availability === 'PREPARING' ? 'PREPARING' : 'UNAVAILABLE'}
+      />
+    )
+  }
 
   return <ReaderView key={chapter.number} story={story} chapter={chapter} />
 }

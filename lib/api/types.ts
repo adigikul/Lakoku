@@ -25,6 +25,17 @@ export type TropeTag =
 
 export type StoryStatus = 'BERJALAN' | 'SELESAI' | 'BARU'
 
+/**
+ * Ketersediaan satu bab dari sudut pandang PEMBACA (reader-safe).
+ *
+ * Sengaja kasar — TIDAK pernah membocorkan detail teknis (layer gagal,
+ * temuan validator, nama model). Reader hanya perlu tahu:
+ * - `PUBLISHED`  : bab siap dibaca.
+ * - `PREPARING`  : bab sedang ditulis (ada lease generasi aktif).
+ * - `UNAVAILABLE`: bab belum tersedia / cerita sedang dirapikan penulisnya.
+ */
+export type ChapterAvailability = 'PUBLISHED' | 'PREPARING' | 'UNAVAILABLE'
+
 /** Satu opsi keputusan yang bisa dipilih pembaca pada akhir sebuah bab. */
 export interface ChoiceOption {
   id: string

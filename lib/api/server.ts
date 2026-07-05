@@ -12,9 +12,15 @@
  * fetch() ke Workers — komponen tidak berubah.
  */
 import 'server-only'
-import type { StorySummary, StoryDetail, Chapter } from './types'
+import type {
+  StorySummary,
+  StoryDetail,
+  Chapter,
+  ChapterAvailability,
+} from './types'
 import { queryStories, queryStory, queryChapter } from './queries'
 import { getReaderStates, getReaderState, type ReaderState } from './user-state'
+import { isChapterPreparing } from './leases'
 
 function overlay<T extends StorySummary>(story: T, state?: ReaderState | null): T {
   if (!state) return story
@@ -63,4 +69,25 @@ export async function getChapter(
     target = story.currentChapter
   }
   return queryChapter(storyId, target)
+}
+
+/**
+ * Ketersediaan satu bab dari sudut pandang pembaca (reader-safe).
+ *
+ * Dipakai saat sebuah bab yang diminta belum ada isinya, agar reader dapat
+ * pesan yang tepat alih-alih dialihkan diam-diam:
+ *  - bab ada di DB          → `PUBLISHED`
+ *  - ada lease generasi aktif → `PREPARING` (sedang ditulis)
+ *  - selain itu             → `UNAVAILABLE` (belum tersedia / sedang dirapikan)
+ *
+ * TIDAK pernah membocorkan alasan teknis kegagalan (layer/temuan/model).
+ */
+export async function getChapterAvailability(
+  storyId: string,
+  chapterNumber: number,
+): Promise<ChapterAvailability> {
+  const chapter = await queryChapter(storyId, chapterNumber)
+  if (chapter) return 'PUBLISHED'
+  const preparing = await isChapterPreparing(storyId, chapterNumber)
+  return preparing ? 'PREPARING' : 'UNAVAILABLE'
 }
