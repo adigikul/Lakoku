@@ -17,6 +17,8 @@ import {
 } from '@/lib/authoring/server'
 import { persistStoryBible } from '@/lib/authoring/server'
 import { runLockLadder, type AiRepairFn } from '@/lib/authoring/repair'
+import { generateNextChapterReal } from '@lakoku/runtime'
+import { createAdminClient } from '@lakoku/db'
 import type {
   PremiseDraft,
   CastDraft,
@@ -121,6 +123,38 @@ export async function lockStoryBible(draft: StoryBibleDraft): Promise<
 
     const { storyId } = await persistStoryBible(result.compiled)
     return { ok: true, storyId, resolvedBy: result.resolvedBy, transforms: result.transforms }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/**
+ * Picu generasi Bab 1 nyata untuk story yang baru dikunci, lalu tandai story
+ * BERJALAN pada bab 1 agar reader (tamu maupun login) langsung menemukannya.
+ *
+ * Idempoten: bila Bab 1 sudah ada (CHAPTER_EXISTS) atau generasi lain sedang
+ * memegang lease (LEASE_HELD), dianggap sukses — reader tetap diarahkan ke bab 1.
+ */
+export async function startFirstChapter(
+  storyId: string,
+): Promise<ActionResult<{ chapterNumber: number }>> {
+  try {
+    const result = await generateNextChapterReal(storyId, 1)
+    if (!result.ok && result.reason !== 'CHAPTER_EXISTS' && result.reason !== 'LEASE_HELD') {
+      console.log('[v0] startFirstChapter gagal:', result.reason, result.detail)
+      return { ok: false, error: 'Bab pertama gagal disiapkan. Coba lagi sebentar.' }
+    }
+
+    // Majukan posisi story ke bab 1 (demo/global state; reader-state per-user
+    // akan menimpanya saat pembaca login & mulai membaca).
+    const db = createAdminClient()
+    const { error } = await db
+      .from('stories')
+      .update({ status: 'BERJALAN', current_chapter: 1 })
+      .eq('id', storyId)
+    if (error) throw new Error(`update story status: ${error.message}`)
+
+    return { ok: true, chapterNumber: 1 }
   } catch (e) {
     return fail(e)
   }

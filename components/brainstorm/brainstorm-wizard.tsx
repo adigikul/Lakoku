@@ -18,6 +18,7 @@ import {
   actProposeMystery,
   actProposeWorld,
   lockStoryBible,
+  startFirstChapter,
   type ActionResult,
 } from '@/app/brainstorm/actions'
 import type {
@@ -137,6 +138,8 @@ export function BrainstormWizard() {
   // Lock state.
   const [findings, setFindings] = useState<Finding[] | null>(null)
   const [transforms, setTransforms] = useState<string[]>([])
+  // Fase pasca-kunci: menyiapkan Bab 1 (generasi nyata) sebelum masuk reader.
+  const [preparing, setPreparing] = useState(false)
 
   const stepIndex = ORDER.indexOf(stage)
 
@@ -214,7 +217,17 @@ export function BrainstormWizard() {
       const res = await lockStoryBible({ premise, cast, mystery, world })
       if (res.ok) {
         setErr(null)
-        router.push(`/baca/${res.storyId}`)
+        // Cerita terkunci. Siapkan Bab 1 (generasi nyata) sebelum masuk reader.
+        setPreparing(true)
+        const gen = await startFirstChapter(res.storyId)
+        if (!gen.ok) {
+          // Bab gagal disiapkan: jangan buntu — arahkan ke detail cerita.
+          setPreparing(false)
+          setErr(gen.error ?? 'Bab pertama gagal disiapkan.')
+          router.push(`/cerita/${res.storyId}`)
+          return
+        }
+        router.push(`/baca/${res.storyId}?bab=1`)
         return
       }
       if ('needsAuthor' in res) {
@@ -225,6 +238,26 @@ export function BrainstormWizard() {
       }
       setErr(res.error ?? 'Gagal mengunci cerita.')
     })
+  }
+
+  if (preparing) {
+    return (
+      <main className="mx-auto flex min-h-svh w-full max-w-md flex-col items-center justify-center gap-6 bg-background px-8 text-center">
+        <span className="lk-pulse-soft font-serif text-3xl text-foreground">lakoku</span>
+        <div className="flex flex-col gap-2">
+          <h1 className="font-serif text-2xl leading-snug text-foreground text-balance">
+            Ceritamu sedang ditulis.
+          </h1>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Dunia, tokoh, dan rahasia yang menunggumu sudah terkunci. Bab 1 sedang
+            disusun—sebentar lagi kamu masuk ke ceritanya.
+          </p>
+        </div>
+        <div className="h-1 w-48 overflow-hidden rounded-full bg-muted">
+          <div className="lk-pulse-soft h-full w-2/3 bg-primary" />
+        </div>
+      </main>
+    )
   }
 
   return (
