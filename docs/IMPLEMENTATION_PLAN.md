@@ -18,7 +18,8 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
 3. Setiap task yang menutup gap konsistensi **wajib mencantumkan ID baris NTM** (mis. `G2-LOADBEAR`) di PR, dan baris itu baru boleh jadi `DONE` bila kelima bukti di NTM §4 lengkap.
 4. Patuhi **23 Non-Negotiable Engineering Rules** (ARCH §23) tanpa pengecualian. Jika sebuah langkah tampak melanggar salah satunya, berhenti dan minta keputusan produk.
 5. Semua pekerjaan di satu monorepo (ARCH §5). Batas kepemilikan paket (ARCH §5.1) adalah aturan keras, bukan saran.
-6. Jangan panggil provider AI dari Android; jangan commit state dari prosa tanpa validasi server + publish atomik; jangan pakai vector search sebagai sumber kebenaran canon.
+6. Jangan panggil provider AI dari client mana pun (web reader maupun Android); jangan commit state dari prosa tanpa validasi server + publish atomik; jangan pakai vector search sebagai sumber kebenaran canon.
+7. **Client sequencing (AMENDMENTS v0.4, LD-CLIENT-SEQ):** web reader mobile-first adalah client produksi pertama (M6-WEB); Android native menyusul (M6) setelah metrik web terbukti. Semua client wajib mengakses data hanya lewat seam client-data async (`lib/api/`); komponen UI tidak boleh bergantung langsung pada sumber data. Brand guard (ARCH §16.3) berlaku identik untuk web dan Android.
 
 **Definition of Done global (berlaku tiap task):** kode + test unit hijau + (bila menyentuh skema) migration test + (bila menyentuh gap) fixture di CI + (bila menyentuh metrik) muncul di dashboard, bukan sekadar log.
 
@@ -34,7 +35,8 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
 | M3 | Memory hierarchy + Layer A validator + alias | Phase B | G2, G3-LAYERA, G5-ALIAS | Simulasi deterministik ke Bab 50 (fixture) |
 | M4 | Template `lakoku_drama_bangkit_v1` + provider gateway | Phase B | G3-LAYERB (awal) | Provider live, plan/prosa schema-valid |
 | M5 | Reconciliation + thread lifecycle + Layer B penuh | Phase B/C | G1, G3-LAYERB, G4 | Soak 50 bab 3 jalur = NCS §8 hijau |
-| M6 | Android reader beta (shell → reader → choice) | Phase C | — | Reader E2E di device nyata |
+| M6-WEB | Web reader mobile-first (shell → reader → choice → koleksi/profil) sampai produksi ⭐ client pertama | Phase C | — | Reader E2E di browser mobile, seam `lib/api` terpasang, brand guard lolos |
+| M6 | Android reader beta (shell → reader → choice) — client kedua, setelah metrik web terbukti | Phase C | — | Reader E2E di device nyata |
 | M7 | Story Foundation, proposal, opening package, reports | Phase C | G5-VOICE | Onboarding → Bab 1 utuh |
 | M8 | Observability, alert, entitlement/checkout webhook | Phase C | G3-METRICS | Dashboard + alert + webhook aman |
 | M9 | Hardening + release gate + beta cut | Phase C | semua `DONE` | ARCH §18.3 + NTM §2 hijau |
@@ -154,6 +156,7 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
   - Deliverable: langkah R di akhir act (5/12/20/32/40/45/48) + on-demand dari step 3 saat drift ≥ 2; blueprint versioned; cek reachability semua ending; hard rule tak boleh langgar spine/reveal gate/ending.
   - Ref: ARCH §11.2 step R (B2), §23 rule #17, NCS §1.
   - DoD: drift fixture (state dibengkokkan di Bab 20) direkonsiliasi tanpa melanggar spine; ending tetap reachable.
+  - **Status:** logika inti SELESAI di `lib/narrative/reconciliation.ts` (versioned regen, ending reachability, spine integrity); terbukti di `m5-soak`. Regenerasi goal ditingkatkan menjadi adaptif LLM-authored di **T7.5** (lihat M7). Wiring WF step R ke runtime nyata menyusul di M6.
 - **T5.2 Layer B model validator** — **NTM G3-LAYERB**
   - Deliverable: cek kontradiksi lunak, voice, emosi vs relationship, memakai `character_voice_sheets`.
   - Ref: ARCH §11.2 step 6 (Layer B), NCS §3.
@@ -166,7 +169,32 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
   - Deliverable: soak 3 jalur (high-trust, low-trust, mixed) di staging.
   - Ref: ARCH §18.2 (B7), NCS §7/§8, NTM §2.
   - DoD (mengikat): 0 kontradiksi CRITICAL; semua ending reachable tiap checkpoint; biaya/bab dalam guardrail (ARCH §20.2).
-- **Exit Criteria M5:** NCS §8 Definition of Success hijau di soak test; NTM G1/G3-LAYERB/G4 = `DONE`. **Gate wajib sebelum reader beta dibuka** (NTM §3).
+- **Exit Criteria M5:** NCS §8 Definition of Success hijau di soak test; NTM G1/G3-LAYERB/G4 = `DONE`. **Gate wajib sebelum cerita AI nyata disajikan ke pembaca** (NTM §3) — berlaku untuk web reader (M6-WEB jalur cerita nyata) maupun Android (M6). Catatan: membangun UI/UX reader di atas *fixtures* (M6-WEB jalur UX) **tidak** dikunci gate ini.
+
+---
+
+### M6-WEB — Web Reader Mobile-First (Phase C) ⭐ client produksi pertama
+
+**Tujuan:** membangun pengalaman baca web mobile-first (client produksi pertama, lihat AMENDMENTS v0.4 / `docs/CLIENT_SEQUENCING.md`) sampai siap produksi, di atas seam data client-agnostic `lib/api/`.
+
+> **Dua-jalur (WAJIB dipahami agen):** M6-WEB punya dua jalur yang berbeda gate-nya.
+> - **Jalur UX (fixtures)** — membangun & memvalidasi UI/UX reader web di atas data fixture deterministik. **Tidak** dikunci di belakang M3/M5; boleh dikerjakan lebih awal (repo saat ini sudah pada jalur ini). Syaratnya: tidak ada logika naratif di client dan tidak ada panggilan AI dari client.
+> - **Jalur cerita nyata (AI ke pembaca)** — menyajikan bab hasil generasi AI kepada pembaca sungguhan. Ini **tetap** terkunci di belakang M5 hijau (NTM §3), sama seperti M6 Android. M6-WEB "siap produksi" hanya boleh diumumkan ke pengguna setelah gate ini lolos.
+
+- **T6W.1 Design system + app shell** — `apps/web` (Next.js App Router, mobile-first), sesuai Brand Guidelines v1.1.
+  - DoD: layout mobile-first (`max-w-md`, bottom nav), token tema Midnight Drama + Paper Cream, aksesibilitas (aria, `prefers-reduced-motion`); tidak ada string "Narraza"/framing "AI generator" (brand guard ARCH §16.3).
+- **T6W.2 Client-data seam `lib/api/`** — kontrak async client-agnostic (LD-CONTRACT-SEAM).
+  - Deliverable: `types.ts` (kontrak domain), `client.ts` (`listStories`/`getStory`/`getChapter`/`submitChoice`), fixtures internal terpisah dari UI.
+  - DoD: tidak ada komponen UI yang mengimpor sumber data langsung; mengganti implementasi `client.ts` ke Reader API nyata tidak menyentuh komponen; bentuk tipe konsisten dengan `packages/contracts` (ARCH §11.1).
+- **T6W.3 Reader + progress** — beranda, detail cerita, reader per-bab, jejak pilihan.
+  - DoD: reader menampilkan bab sesuai cerita (bukan sample statis); progress monotonic; loading state pakai bahasa naratif, bukan "AI sedang generate".
+- **T6W.4 Choice submission + pending-choice recovery + generation status** — via `submitChoice`, selaras ARCH §10 & §23 rule #5.
+  - DoD: repeat tap tidak double-advance; status reader-safe tanpa metadata model; konsekuensi & bab berikutnya berasal dari outcome server/seam.
+- **T6W.5 Verifikasi browser mobile** — agent-browser (viewport mobile).
+  - DoD: alur beranda → baca → pilih → konsekuensi → lanjut lolos; type-check & lint hijau.
+- **Exit Criteria M6-WEB:**
+  - *Jalur UX:* reader web mobile-first E2E lolos di browser dengan fixtures; seam `lib/api` terpasang tanpa kebocoran sumber data ke UI; brand guard lolos.
+  - *Jalur cerita nyata:* pengumuman "produksi ke pengguna" hanya setelah `client.ts` menunjuk Reader API nyata **dan** M5 hijau (NTM §3).
 
 ---
 
@@ -192,8 +220,17 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
   - Deliverable: opening package membuat `character_voice_sheets`; voice masuk T0 untuk karakter yang tampil.
   - Ref: NCS §5.3.
   - DoD: voice fixture; opening → Bab 1 utuh.
-- **T7.3 Reports + safe error states** — ARCH §7.9 (`FAILED_REVIEW_REQUIRED`), PRD §7.9.
+- **T7.3 Reports + safe error states** — ARCH §7.9 (`FAILED_REVIEW_REQUIRED`), PRD §7.9. — 🚧 SEBAGIAN.
+  - ✅ **Safe error states (reader-facing):** `ChapterAvailability` (`lib/api/types.ts`), `isChapterPreparing()` (`lib/api/leases.ts`, admin client karena `generation_leases` RLS-locked), `getChapterAvailability()` (`lib/api/server.ts`); layar `components/chapter-unavailable.tsx` (PREPARING dgn progress bar + auto `router.refresh()` vs UNAVAILABLE dgn tombol coba lagi). `app/baca/[id]/page.tsx` tak lagi `redirect()` diam-diam. Verifikasi browser dua state lolos (viewport mobile). Tanpa kebocoran metadata teknis; bab rusak (`FAILED_REVIEW_REQUIRED` melepas lease tanpa publish) tak pernah dipaksa tampil.
+  - ⏳ **Reports (laporan pembaca + referensi kanonik):** belum dikerjakan.
   - DoD: bahasa aman ("Cerita ini sedang dirapikan penulisnya"); bab rusak tak pernah dipaksa publish.
+- **T7.4 AI canon-authoring (brainstorm wizard)** — ✅ SELESAI.
+  - Deliverable: modul `lib/authoring/` (schema draft zod, `model.ts` proposer via `generateObject`, `validate.ts`+`compile.ts` draft→`CanonSnapshot`/blueprint, `repair.ts` tangga kegagalan validate→AI repair→transform→escalate, `persist.ts` commit ke Supabase). Wizard 6-tahap `components/brainstorm/` + `app/brainstorm/` (idea→premis→cast→misteri→dunia→kunci). Entry point beranda/landing/bottom-nav → `/brainstorm`. Lock sukses → `startFirstChapter()` memicu `generateNextChapterReal(storyId,1)`, majukan `stories.status=BERJALAN`/`current_chapter=1`, redirect `/baca/{id}?bab=1`.
+  - DoD: smoke `m7-authoring-smoke` 13/13 + roundtrip DB; alur end-to-end terverifikasi browser. Spine tak pernah diubah authoring.
+- **T7.5 Reconciliation runtime-adaptif (regenerateGoal LLM-authored)** — ✅ SELESAI.
+  - Deliverable: `runReconciliationAdaptive(input, goalAuthor?)` di `lib/narrative/reconciliation.ts` (DI `GoalAuthorFn`/`GoalAuthorContext`, meniru `AiRepairFn`); `lib/authoring/reconcile-goal.ts` (`makeGoalAuthor`/`authorChapterGoal` + `validateAuthoredGoal` anti-leak & anti reveal dini). Goal drift ≥ 2 ditulis ulang LLM dalam pagar spine; gagal/menolak → fallback deterministik (tak pernah buntu).
+  - Ref: NCS §1.2 (step 3), §1.4.
+  - DoD: smoke `m7b-reconcile-smoke` 23/23 (regresi deterministik, adaptif+spine utuh, fallback, ending unreachable→FAILED); regresi `m5-soak` 236 hijau.
 - **Exit Criteria M7:** onboarding sampai Bab 1 mulus; laporan pembaca menautkan referensi kanonik.
 
 ---
@@ -215,7 +252,7 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
 ### M9 — Hardening + Release Gate + Beta Cut
 
 - **T9.1 Isi seluruh baris NTM ke `DONE`** — verifikasi kelima bukti per baris (NTM §4).
-- **T9.2 Release gate** — ARCH §18.3 (B8) + NTM §2: build ditolak bila ada baris in-scope belum `DONE`, jargon Narraza/AI bocor, soak 50 bab gagal NCS §8, atau Android build/API contract gagal.
+- **T9.2 Release gate** — ARCH §18.3 (B8) + NTM §2: build ditolak bila ada baris in-scope belum `DONE`, jargon Narraza/AI bocor di client mana pun (web/Android), soak 50 bab gagal NCS §8, atau web build / Android build / API contract gagal.
 - **T9.3 Staging QA end-to-end** di device nyata + privacy review data.
 - **Exit Criteria M9 (beta-ready):** ARCH §18.3 + NTM §2 hijau; soak 50 bab 3 jalur bersih; semua ending reachable; biaya/bab dalam guardrail.
 
@@ -224,17 +261,23 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
 ## 3. Dependency Graph (ringkas)
 
 ```
-M0 → M1 → M2 → M3 → M4 → M5 → M9
-                     └→ M6 → M7 → M8 → M9
+M0 → M1 → M2 → M3 → M4 → M5 ─────────────→ M9
+     │               └→ M6 → M7 → M8 → M9
+     └→ M6-WEB (jalur UX, fixtures) ┄┄┄ menyajikan cerita AI ke pembaca menunggu M5
 ```
 
 - M3 adalah **prasyarat keras** untuk semua generasi panjang (NTM §3).
-- M5 adalah **prasyarat keras** untuk membuka reader beta ke pengguna (NTM §3).
+- M5 adalah **prasyarat keras** untuk menyajikan cerita AI nyata ke pengguna — baik lewat web reader (M6-WEB jalur cerita nyata) maupun Android (M6) (NTM §3).
+- **M6-WEB jalur UX (fixtures)** hanya bergantung pada kontrak di M1 dan boleh dimulai lebih awal, paralel dengan M2–M5. Yang dikunci di belakang M5 adalah *menyajikan bab AI ke pembaca*, bukan membangun UI/UX di atas fixtures.
 - M6–M8 boleh berjalan paralel dengan penyelesaian M5 **hanya** untuk pekerjaan UI yang tidak bergantung pada output naratif final; integrasi penuh menunggu M5 hijau.
 
 ---
 
 ## 4. Checklist Sign-off per Milestone (untuk agen)
+
+> **Tracker task hidup:** status per-task M0–M9 dicentang di `docs/PROGRESS_CHECKLIST.md`.
+> Agen wajib memeriksa tracker itu sebelum mulai bekerja agar task yang terlewat ketahuan,
+> dan memperbaruinya di PR yang sama saat sebuah task selesai.
 
 Untuk setiap milestone, agen menandai selesai hanya bila:
 

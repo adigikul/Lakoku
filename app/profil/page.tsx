@@ -10,7 +10,9 @@ import {
   Trophy,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
-import { stories } from '@/lib/stories'
+import { LogoutButton } from '@/components/logout-button'
+import { listStories, getStory } from '@/lib/api/server'
+import { getSessionUser } from '@/lib/api/user-state'
 
 const settings = [
   { icon: Palette, label: 'Tema dan Ukuran Teks', desc: 'Atur kenyamanan membacamu' },
@@ -19,10 +21,15 @@ const settings = [
   { icon: KeyRound, label: 'Akun dan Privasi', desc: 'Email, kata sandi, dan datamu' },
 ]
 
-export default function ProfilPage() {
+export default async function ProfilPage() {
+  const user = await getSessionUser()
+  const displayName = user?.email ? user.email.split('@')[0] : 'Tamu'
+  const initial = displayName.charAt(0).toUpperCase()
+  const stories = await listStories()
+  const details = await Promise.all(stories.map((s) => getStory(s.id)))
   const totalBerjalan = stories.filter((s) => s.status === 'BERJALAN').length
   const totalSelesai = stories.filter((s) => s.status === 'SELESAI').length
-  const totalPilihan = stories.reduce((n, s) => n + s.jejak.length, 0)
+  const totalPilihan = details.reduce((n, s) => n + (s?.jejak.length ?? 0), 0)
 
   return (
     <AppShell>
@@ -32,11 +39,15 @@ export default function ProfilPage() {
             aria-hidden="true"
             className="flex size-14 items-center justify-center rounded-full bg-secondary font-serif text-xl text-secondary-foreground"
           >
-            R
+            {initial}
           </span>
           <div className="flex flex-col">
-            <h1 className="font-serif text-2xl text-foreground">Rani</h1>
-            <p className="text-xs text-muted-foreground">Tokoh utama sejak Maret 2026</p>
+            <h1 className="font-serif text-2xl text-foreground">{displayName}</h1>
+            <p className="text-xs text-muted-foreground">
+              {user
+                ? 'Tokoh utama — jejakmu tersimpan di akun ini'
+                : 'Mode tamu — masuk agar jejakmu tersimpan'}
+            </p>
           </div>
         </header>
 
@@ -84,12 +95,24 @@ export default function ProfilPage() {
         </section>
 
         <section className="mb-4 flex flex-col gap-3">
-          <Link
-            href="/"
-            className="flex min-h-13 items-center justify-center rounded-2xl border border-border px-6 text-sm font-semibold text-foreground transition-colors hover:bg-card"
-          >
-            Keluar
-          </Link>
+          {user ? (
+            <LogoutButton />
+          ) : (
+            <div className="flex flex-col gap-3">
+              <Link
+                href="/auth/login"
+                className="flex min-h-13 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Masuk
+              </Link>
+              <Link
+                href="/auth/sign-up"
+                className="flex min-h-13 items-center justify-center rounded-2xl border border-border px-6 text-sm font-semibold text-foreground transition-colors hover:bg-card"
+              >
+                Daftar
+              </Link>
+            </div>
+          )}
           <p className="text-center text-[11px] text-muted-foreground">
             lakoku — Novel Interaktif · Versi 0.2 (Prototype)
           </p>

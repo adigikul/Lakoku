@@ -2,10 +2,11 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, Footprints, Lock, RotateCcw, Share2 } from 'lucide-react'
-import { getStory, stories } from '@/lib/stories'
+import { getStory, listStoryIds } from '@/lib/api/server'
 
-export function generateStaticParams() {
-  return stories.map((s) => ({ id: s.id }))
+export async function generateStaticParams() {
+  const ids = await listStoryIds()
+  return ids.map((id) => ({ id }))
 }
 
 export default async function AkhirCeritaPage({
@@ -14,7 +15,7 @@ export default async function AkhirCeritaPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const story = getStory(id)
+  const story = await getStory(id)
   if (!story || story.status !== 'SELESAI') notFound()
 
   return (

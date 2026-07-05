@@ -3,10 +3,12 @@ import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, Footprints } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
-import { getStory, stories } from '@/lib/stories'
+import { ResumeChapter } from '@/components/resume-chapter'
+import { getStory, listStoryIds } from '@/lib/api/server'
 
-export function generateStaticParams() {
-  return stories.map((s) => ({ id: s.id }))
+export async function generateStaticParams() {
+  const ids = await listStoryIds()
+  return ids.map((id) => ({ id }))
 }
 
 export default async function CeritaDetailPage({
@@ -15,7 +17,7 @@ export default async function CeritaDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const story = getStory(id)
+  const story = await getStory(id)
   if (!story) notFound()
 
   return (
@@ -95,7 +97,14 @@ export default async function CeritaDetailPage({
               href={`/baca/${story.id}`}
               className="flex min-h-13 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             >
-              {story.status === 'BARU' ? 'Mulai Cerita' : `Lanjutkan Cerita — Bab ${story.currentChapter}`}
+              {story.status === 'BARU' ? (
+                'Mulai Cerita'
+              ) : (
+                <>
+                  Lanjutkan Cerita — Bab{' '}
+                  <ResumeChapter storyId={story.id} fallback={story.currentChapter} />
+                </>
+              )}
             </Link>
           )}
         </section>
