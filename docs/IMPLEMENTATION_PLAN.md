@@ -220,7 +220,9 @@ Dokumen ini adalah **runbook**: urutan kerja dari repo kosong sampai beta 50 bab
   - Deliverable: opening package membuat `character_voice_sheets`; voice masuk T0 untuk karakter yang tampil.
   - Ref: NCS §5.3.
   - DoD: voice fixture; opening → Bab 1 utuh.
-- **T7.3 Reports + safe error states** — ARCH §7.9 (`FAILED_REVIEW_REQUIRED`), PRD §7.9.
+- **T7.3 Reports + safe error states** — ARCH §7.9 (`FAILED_REVIEW_REQUIRED`), PRD §7.9. — 🚧 SEBAGIAN.
+  - ✅ **Safe error states (reader-facing):** `ChapterAvailability` (`lib/api/types.ts`), `isChapterPreparing()` (`lib/api/leases.ts`, admin client karena `generation_leases` RLS-locked), `getChapterAvailability()` (`lib/api/server.ts`); layar `components/chapter-unavailable.tsx` (PREPARING dgn progress bar + auto `router.refresh()` vs UNAVAILABLE dgn tombol coba lagi). `app/baca/[id]/page.tsx` tak lagi `redirect()` diam-diam. Verifikasi browser dua state lolos (viewport mobile). Tanpa kebocoran metadata teknis; bab rusak (`FAILED_REVIEW_REQUIRED` melepas lease tanpa publish) tak pernah dipaksa tampil.
+  - ⏳ **Reports (laporan pembaca + referensi kanonik):** belum dikerjakan.
   - DoD: bahasa aman ("Cerita ini sedang dirapikan penulisnya"); bab rusak tak pernah dipaksa publish.
 - **T7.4 AI canon-authoring (brainstorm wizard)** — ✅ SELESAI.
   - Deliverable: modul `lib/authoring/` (schema draft zod, `model.ts` proposer via `generateObject`, `validate.ts`+`compile.ts` draft→`CanonSnapshot`/blueprint, `repair.ts` tangga kegagalan validate→AI repair→transform→escalate, `persist.ts` commit ke Supabase). Wizard 6-tahap `components/brainstorm/` + `app/brainstorm/` (idea→premis→cast→misteri→dunia→kunci). Entry point beranda/landing/bottom-nav → `/brainstorm`. Lock sukses → `startFirstChapter()` memicu `generateNextChapterReal(storyId,1)`, majukan `stories.status=BERJALAN`/`current_chapter=1`, redirect `/baca/{id}?bab=1`.
