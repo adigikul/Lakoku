@@ -1,7 +1,6 @@
 import 'server-only'
-import { generateObject, type LanguageModel } from 'ai'
+import { generateText, type LanguageModel } from 'ai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { z } from 'zod'
 import type { CanonSnapshot, Finding } from '@lakoku/narrative-core'
 import {
   createDeterministicProvider,
@@ -63,17 +62,52 @@ function resolveModel(optModel?: string): { model: LanguageModel; label: string 
 }
 
 /** Skema prosa yang diminta dari model — hanya konten naratif untuk pembaca. */
-const ProseSchema = z.object({
-  title: z
-    .string()
-    .min(1)
-    .describe('Judul bab dalam Bahasa Indonesia, ringkas dan menggugah, tanpa nomor bab.'),
-  paragraphs: z
-    .array(z.string().min(1))
-    .min(3)
-    .max(8)
-    .describe('Paragraf prosa naratif Bahasa Indonesia, urut, membentuk 2–4 adegan.'),
-})
+/**
+ * Parse teks bebas dari LLM menjadi {title, paragraphs}.
+ *
+ * Kontrak keluaran (lihat prompt): baris pertama diawali `JUDUL:` lalu judul,
+ * diikuti baris kosong, lalu prosa dengan paragraf dipisah baris kosong. Parser
+ * ini toleran: bila prefiks `JUDUL:` tak ada, baris non-kosong pertama dianggap
+ * judul. Dibuat begini agar kompatibel dengan endpoint OpenAI-compatible apa pun
+ * (banyak yang tak mendukung structured/JSON output).
+ */
+function parseProse(text: string): { title: string; paragraphs: string[] } {
+  const blocks = text
+    .replace(/\r\n/g, '\n')
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean)
+
+  if (blocks.length === 0) {
+    throw new Error('gateway-provider: LLM mengembalikan teks kosong.')
+  }
+
+  let title = ''
+  const first = blocks[0]
+  const titleMatch = first.match(/^\s*(?:JUDUL|Judul|TITLE|Title)\s*[:：]\s*(.+)$/)
+  if (titleMatch) {
+    title = titleMatch[1].trim()
+    blocks.shift()
+  } else {
+    // Baris pertama sebagai judul jika singkat (satu baris), selain itu sintesis.
+    const firstLine = first.split('\n')[0].trim()
+    if (!first.includes('\n') && firstLine.length <= 80) {
+      title = firstLine.replace(/^#+\s*/, '')
+      blocks.shift()
+    } else {
+      title = 'Tanpa Judul'
+    }
+  }
+
+  // Ratakan paragraf: pecah blok multi-baris menjadi paragraf per baris berisi.
+  const paragraphs = blocks
+    .flatMap((b) => b.split(/\n+/))
+    .map((p) => p.trim())
+    .filter(Boolean)
+
+  if (!title) title = 'Tanpa Judul'
+  return { title, paragraphs }
+}
 
 type ProseModel = {
   /** Model gateway, mis. "openai/gpt-4.1-mini". */
@@ -139,6 +173,9 @@ function buildPrompt(args: {
     'Jangan memperkenalkan tokoh bernama baru di luar daftar di atas.',
     'Jangan membocorkan rahasia yang belum waktunya terungkap.',
     repairHints(args.repairFindings),
+    'FORMAT KELUARAN (WAJIB): baris pertama tepat `JUDUL: <judul bab>` (tanpa nomor bab). ' +
+      'Setelah satu baris kosong, tulis prosa cerita. Pisahkan tiap paragraf dengan satu baris kosong. ' +
+      'Jangan tambahkan penjelasan, label, atau markdown lain di luar ketentuan ini.',
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -160,18 +197,18 @@ async function generateProse(args: {
   const { system, prompt } = buildPrompt(args)
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { object } = await generateObject({
+    const { text } = await generateText({
       model: args.model,
-      schema: ProseSchema,
       system,
       prompt:
         attempt === 0
           ? prompt
           : `${prompt}\n\nCATATAN: revisi sebelumnya memuat istilah teknis terlarang. Tulis ulang murni sebagai narasi cerita.`,
     })
-    const blob = [object.title, ...object.paragraphs].join('\n')
+    const { title, paragraphs } = parseProse(text)
+    const blob = [title, ...paragraphs].join('\n')
     if (scanForLeaks(blob).length === 0) {
-      return { title: object.title, paragraphs: object.paragraphs }
+      return { title, paragraphs }
     }
   }
   throw new Error('gateway-provider: prosa LLM memuat istilah internal setelah 2 percobaan.')
