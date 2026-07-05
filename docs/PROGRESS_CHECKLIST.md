@@ -1,7 +1,7 @@
 # Lakoku — Progress Checklist (Task Tracker) v1.0
 
 **Status:** Living document — dicentang seiring pekerjaan berjalan
-**Last updated:** 5 Juli 2026 (M2 Runtime Lifecycle interim: RPC atomik `publish_chapter`/`acquire_generation_lease`, event log append-only, idempotency keys, generation lease, fake generation workflow deterministik, ETag+304 di endpoint bab — harness invariant 9/9 hijau, verifikasi HTTP lulus)
+**Last updated:** 5 Juli 2026 (M3 Memory Hierarchy + Layer A + Alias interim: 12 tabel canon naratif RLS deny-default, alias resolver, context compiler T0–T3 + budget + load-bearing protection, Layer A 8-cek deterministik — simulasi fixture 50 bab + uji negatif 13/13 hijau, tsc & lint hijau)
 **Turunan dari:** `docs/IMPLEMENTATION_PLAN.md` (runbook v1.0) — jika runbook berubah, sinkronkan checklist ini di PR yang sama (anti-drift, runbook §5)
 **Cara pakai:** Setiap task = satu checkbox. Centang HANYA bila Definition of Done (DoD) task terpenuhi. Milestone dianggap selesai hanya bila blok Sign-off-nya lengkap (lihat runbook §4).
 
@@ -18,7 +18,7 @@
 | M0 — Repo, tooling, CI skeleton | `[ ]` | Belum monorepo ARCH §5; repo saat ini single Next.js app |
 | M1 — Contracts + DB + RLS | `[~]` | Supabase terhubung; skema reader-path + RLS read publik + seed; **auth + `reader_states` per-user RLS pemilik-saja hidup**. `packages/contracts`/`db` & domain naratif ARCH §13.1 belum |
 | M2 — Runtime lifecycle + fake gen E2E | `[~]` | Runtime interim di app Next.js (`lib/runtime/`) + RPC atomik Postgres: event log, idempotency, lease, publish_chapter, fake gen E2E, ETag. Harness invariant hijau. Struktur `packages/runtime` (monorepo) belum |
-| M3 — Memory hierarchy + Layer A + alias | `[ ]` | Belum ada `packages/narrative-core` |
+| M3 — Memory hierarchy + Layer A + alias | `[~]` | narrative-core interim di `lib/narrative/` + 12 tabel canon (RLS deny-default): alias resolver, context compiler T0–T3 + budget + load-bearing protection, Layer A (8 cek). Simulasi 50 bab + 8 cek negatif hijau (13/13). Struktur `packages/narrative-core` (monorepo) belum |
 | M4 — Template + provider gateway | `[ ]` | Belum ada `packages/ai-gateway` |
 | M5 — Reconciliation + thread + Layer B | `[ ]` | Gate 50 bab; belum dimulai |
 | **M6-WEB — Web reader mobile-first** | `[~]` | **Jalur UX (fixtures) TUNTAS** — Exit Criteria jalur UX ✔ (lint+tsc hijau); jalur cerita nyata menunggu M5 |
@@ -74,11 +74,16 @@
 
 ## M3 — Memory Hierarchy + Layer A Validator + Alias ⭐ fondasi konsistensi
 
-- [ ] **T3.1 Context compiler + T0–T3** (`packages/narrative-core`) — NTM G2-TIERS, G2-BUDGET — Chapter Context Packet (ARCH §12.2) + budget policy NCS §2.2; T1 rollup otomatis (WF step 9).
-- [ ] **T3.2 Load-bearing protection + retrieval log** — NTM G2-LOADBEAR — fakta `LOAD_BEARING` tak dipangkas sebelum dibayar; exclusion list ke `retrieval_logs`.
-- [ ] **T3.3 Layer A deterministic validator** — NTM G3-LAYERA — cek tanpa LLM (karakter terdaftar, no reveal pre-gate, knowledge scope, state delta, timeline monotonic, struktur bab, resolusi alias, larangan karakter baru > Bab 30).
-- [ ] **T3.4 Alias registry** — NTM G5-ALIAS — WF step 5 resolve mention → `character_id`; unresolved = MAJOR.
-- [ ] **Exit Criteria M3** — simulasi deterministik ke Bab 50 (fixture) lolos Layer A; NTM G2-*, G3-LAYERA, G5-ALIAS = `DONE`. Gate wajib sebelum Phase B lanjut.
+- [~] **T3.1 Context compiler + T0–T3** (`packages/narrative-core`) — NTM G2-TIERS, G2-BUDGET — Chapter Context Packet (ARCH §12.2) + budget policy NCS §2.2; T1 rollup otomatis (WF step 9).
+  - [x] `lib/narrative/compiler.ts`: `compileContext()` menghasilkan packet §12.2 (contextVersion, phase, chapterGoal, forbiddenReveals, activeThreads, loadBearingFacts, relevantFacts, actRollups T1, voiceSheets, budgetReport). Budget policy §2.2 (alokasi per-seksi, seksi keras tak dipotong, T2/rollup tertua dikompres dulu). Skema 12 tabel canon (ARCH §13.1) via migrasi `narrative_canon_baseline`.
+  - [x] Skema canon: `characters`, `character_states`, `character_aliases`, `character_voice_sheets`, `facts_ledger` (+salience/load_bearing/paid_off), `knowledge_scopes`, `secrets_reveals`, `timeline_events`, `story_threads` (+status/payoff_window), `act_rollups`, `chapter_blueprints` (+version/reconciled_from/reason), `retrieval_logs` — semua RLS deny-default.
+  - [ ] T1 rollup **otomatis** saat act selesai (WF step 9) — menunggu workflow generasi M4/M5; kini rollup di-supply via canon/fixture. Loader Supabase→snapshot belum (compiler operasi atas snapshot in-memory).
+- [x] **T3.2 Load-bearing protection + retrieval log** — NTM G2-LOADBEAR — fakta `LOAD_BEARING` belum-dibayar TAK PERNAH dipangkas (terbukti di budget ketat 40 token); exclusion list (`includedIds`/`excludedIds` + `budget_report`) siap ditulis ke `retrieval_logs`.
+- [x] **T3.3 Layer A deterministic validator** — NTM G3-LAYERA — `lib/narrative/layer-a.ts`, 8 cek tanpa LLM: (1) karakter terdaftar & hidup/aktif & sudah diperkenalkan [CRITICAL], (2) no reveal pre-gate [CRITICAL], (3) knowledge scope [CRITICAL], (4) state delta ⊆ allowed [CRITICAL], (5) timeline monotonic + hormati flashback [MAJOR], (6) struktur bab 500–800 kata/2–4 scene/ada choice [MAJOR], (7) resolusi alias [MAJOR], (8) larangan karakter baru bernama > Bab 30 tanpa blueprint [CRITICAL]. Semua terbukti menyala via uji negatif.
+- [x] **T3.4 Alias registry** — NTM G5-ALIAS — `lib/narrative/alias.ts`: resolver canonical name + alias (case-insensitive, tipe NAME/NICKNAME/RELATION/TITLE) → `character_id`; mention tak ter-resolve = MAJOR (bukan karakter baru otomatis). Terbukti: "ibu mertua"→Ratna resolve, "Orang Asing" → ALIAS_UNRESOLVED.
+- [~] **Exit Criteria M3** — simulasi deterministik ke Bab 50 (fixture) lolos Layer A; NTM G2-*, G3-LAYERA, G5-ALIAS = `DONE`. Gate wajib sebelum Phase B lanjut.
+  - [x] Fixture `fixtures/narrative/fixture-50.ts` (drama 50 bab, 8 act, reveal gate 12/20/32/45, karakter baru terencana Bab 33) + harness `scripts/narrative-layer-a.ts`: 50 bab valid lolos Layer A (0 finding) & 8 cek negatif menyala — **13/13 PASS**, tsc & lint hijau.
+  - [ ] Loader Supabase→snapshot nyata + integrasi ke jalur generasi (menunggu M4). Tandai NTM `DONE` setelah dipakai di workflow AI nyata.
 
 ## M4 — Template + Provider Gateway
 

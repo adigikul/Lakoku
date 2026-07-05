@@ -37,15 +37,15 @@ Kolom: **Gap** (NCS) · **Requirement** · **Skema DB** · **Runtime/Validator**
 
 | ID | Requirement | Skema DB | Runtime/Validator | Fixture | Metrik | Release gate | Status |
 |---|---|---|---|---|---|---|---|
-| G2-TIERS | Hierarki T0–T3; T1 rollup otomatis saat act selesai | `act_rollups` (T1), `chapter_summaries` (T2) | WF step 1 & step 9 | soak (context di Bab 45 = T0+rollup+±8 summary) | cost/bab dalam guardrail (NCS §8.4) | soak | TODO |
-| G2-BUDGET | Alokasi budget packet + aturan overflow | — | Context compiler; `context_budget_report{}` | load-bearing fixture | — | soak | TODO |
-| G2-LOADBEAR | `LOAD_BEARING` tak pernah dipangkas sebelum dibayar; exclusion di-log | `facts_ledger.load_bearing`, `.salience`; `retrieval_logs` | Context compiler; ARCH rule #16 | load-bearing fixture (fakta Bab 3 muncul benar Bab 47) | — | soak | TODO |
+| G2-TIERS | Hierarki T0–T3; T1 rollup otomatis saat act selesai | `act_rollups` (T1), `chapter_summaries` (T2) | WF step 1 & step 9 | soak (context di Bab 45 = T0+rollup+±8 summary) | cost/bab dalam guardrail (NCS §8.4) | soak | IN_PROGRESS (compiler `lib/narrative/compiler.ts` masukkan T1 rollups ke packet; tabel `act_rollups` ada. T1 auto-rollup WF step 9 & soak nunggu M4/M5) |
+| G2-BUDGET | Alokasi budget packet + aturan overflow | — | Context compiler; `context_budget_report{}` | load-bearing fixture | — | soak | IN_PROGRESS (budget policy §2.2 + `context_budget_report` di compiler; fixture `fixture-50` lulus; soak nunggu M5) |
+| G2-LOADBEAR | `LOAD_BEARING` tak pernah dipangkas sebelum dibayar; exclusion di-log | `facts_ledger.load_bearing`, `.salience`; `retrieval_logs` | Context compiler; ARCH rule #16 | load-bearing fixture (fakta Bab 3 muncul benar Bab 47) | — | soak | IN_PROGRESS (load-bearing tak terpangkas terbukti di harness budget-ketat; `facts_ledger.load_bearing/.salience` + `retrieval_logs` ada; penulisan log runtime nunggu M4) |
 
 ### G3 — Continuity Validator (NCS §3)
 
 | ID | Requirement | Skema DB | Runtime/Validator | Fixture | Metrik | Release gate | Status |
 |---|---|---|---|---|---|---|---|
-| G3-LAYERA | Cek deterministik (tanpa LLM): karakter hidup/terdaftar, no reveal pre-gate, knowledge scope, state delta ⊆ allowed, timeline, struktur bab, alias, karakter baru >Bab30 | `characters`, `character_states`, `secrets_reveals`, `knowledge_scopes`, `timeline_events`, `character_aliases` | WF step 6 Layer A | seeded contradiction, prohibited early reveal | `continuity_critical_rate` per bab | ARCH §18.3 | TODO |
+| G3-LAYERA | Cek deterministik (tanpa LLM): karakter hidup/terdaftar, no reveal pre-gate, knowledge scope, state delta ⊆ allowed, timeline, struktur bab, alias, karakter baru >Bab30 | `characters`, `character_states`, `secrets_reveals`, `knowledge_scopes`, `timeline_events`, `character_aliases` | WF step 6 Layer A | seeded contradiction, prohibited early reveal | `continuity_critical_rate` per bab | ARCH §18.3 | IN_PROGRESS (`lib/narrative/layer-a.ts` 8 cek lengkap; skema canon ada; harness `narrative-layer-a.ts` 13/13 hijau termasuk seeded contradiction & early reveal. Integrasi WF step 6 & metrik dashboard nunggu M4/M5) |
 | G3-LAYERB | Cek berbasis model: kontradiksi lunak, voice, emosi vs relationship | `character_voice_sheets` | WF step 6 Layer B | voice fixture | `continuity_critical_rate` | soak | TODO |
 | G3-REPAIR | Maks 2 repair/lapis → `FAILED_REVIEW_REQUIRED`; repair tak hapus canon | — | WF step 8 | retry fixture | `repair_success_rate` | soak | TODO |
 | G3-METRICS | Dashboard + alert monotonic | — | Observability (ARCH §17.3/§17.4) | — | `continuity_critical_rate`, `reader_inconsistency_report_rate` | beta gate (PRD §5.3) | TODO |
@@ -63,7 +63,7 @@ Kolom: **Gap** (NCS) · **Requirement** · **Skema DB** · **Runtime/Validator**
 
 | ID | Requirement | Skema DB | Runtime/Validator | Fixture | Metrik | Release gate | Status |
 |---|---|---|---|---|---|---|---|
-| G5-ALIAS | Setiap mention di-resolve ke `character_id`; unresolved = MAJOR, bukan karakter baru | `character_aliases (character_id, alias, alias_type)` | WF step 5 (extract) | alias fixture (3 sebutan, 1 bab) | — | soak | TODO |
+| G5-ALIAS | Setiap mention di-resolve ke `character_id`; unresolved = MAJOR, bukan karakter baru | `character_aliases (character_id, alias, alias_type)` | WF step 5 (extract) | alias fixture (3 sebutan, 1 bab) | — | soak | IN_PROGRESS (`lib/narrative/alias.ts` resolver + `character_aliases` (alias_type NAME/NICKNAME/RELATION/TITLE); unresolved=MAJOR terbukti; alias relasi "ibu mertua"→Ratna resolve. Integrasi WF step 5 extractor nunggu M4) |
 | G5-NOCONFLICT | Fakta baru konflik utk entitas sama = CRITICAL, no last-write-wins | `facts_ledger` | WF step 6 Layer A | seeded contradiction | `continuity_critical_rate` | soak | TODO |
 | G5-VOICE | Voice sheet dibuat saat opening package; masuk T0 utk karakter tampil; dicek Layer B | `character_voice_sheets` | Opening package WF; WF step 6 Layer B | voice fixture | — | soak | TODO |
 
