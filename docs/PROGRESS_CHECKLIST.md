@@ -87,10 +87,15 @@
 
 ## M4 — Template + Provider Gateway
 
-- [ ] **T4.1 Planner/writer output schema + repair protocol** — NTM G3-REPAIR — skema plan & draft; repair maks 2/lapis → `FAILED_REVIEW_REQUIRED`; repair tak hapus canon.
-- [ ] **T4.2 Template `lakoku_drama_bangkit_v1`** — blueprint 50 bab (8 act, gate 5/12/20/32/40/45/48), reveal gates, ending rules, fixture regresi di `fixtures/narrative/`.
-- [ ] **T4.3 `packages/ai-gateway`** — adapter provider di balik kontrak internal (`generatePlan()`, `writeChapter()`); plan & prosa schema-valid; tak ada string yang bocorkan model/prompt/token.
-- [ ] **Exit Criteria M4** — generasi AI satu bab lolos Layer A + repair; string consumer-safe.
+- [x] **T4.1 Planner/writer output schema + repair protocol** — NTM G3-REPAIR — skema plan & draft; repair maks 2/lapis → `FAILED_REVIEW_REQUIRED`; repair tak hapus canon.
+  - **TERBUKTI**: `lib/ai-gateway/schemas.ts` (Zod) — `ChapterPlanSchema` (superRefine: dilarang buka thread baru ≥ Bab 41, NCS §4.2) + `ChapterDraftSchema` (`.strict()`, selaras `ChapterDraft` M3). `lib/ai-gateway/generate.ts` orkestrasi plan→write→Layer A→repair: MAX_REPAIR=2 (CRITICAL/MAJOR masuk repair, MINOR dicatat), gagal → `FAILED_REVIEW_REQUIRED` (draft null, tak dipaksa publish). Invariant `canonFingerprint` before/after memastikan repair TAK memutasi/menghapus canon.
+- [x] **T4.2 Template `lakoku_drama_bangkit_v1`** — blueprint 50 bab (8 act, gate 5/12/20/32/40/45/48), reveal gates, ending rules, fixture regresi di `fixtures/narrative/`.
+  - **TERBUKTI**: `lib/narrative/template.ts` — 8 `ACTS` (gate 5/12/20/32/40/45/48/50), `REVEAL_GATE_CHAPTERS` 12/20/32/45, `ENDING_RULES` (window Bab 49+, mystery utama wajib RESOLVED sebelum Bab 48, min 2 ending reachable). `buildBlueprints(spine)` menurunkan 50 blueprint deterministik; `forbidden_reveals` bab N = secret dgn gate > N. Fixture regresi memakai `fixtures/narrative/fixture-50.ts` (snapshot canon konsisten).
+- [x] **T4.3 `packages/ai-gateway`** — adapter provider di balik kontrak internal (`generatePlan()`, `writeChapter()`); plan & prosa schema-valid; tak ada string yang bocorkan model/prompt/token.
+  - **TERBUKTI**: `lib/ai-gateway/gateway.ts` kontrak internal `generatePlan()`/`writeChapter()` — panggil provider → validasi schema → tolak invalid (`GatewayError` PLAN_INVALID/DRAFT_INVALID). `lib/ai-gateway/provider.ts` interface `GenerationProvider` + adapter deterministik (fake, belum AI nyata — itu M5/soak); nama provider internal tak pernah masuk output. Boundary consumer-safe: `toReaderSafe()` (buang field internal), `scanForLeaks()`/`assertConsumerSafe()` menolak istilah bocor (model/prompt/token/Narraza/gpt/claude/gemini/llm/rag/embedding/provider) → `CONSUMER_LEAK`.
+  - Catatan struktur: diletakkan di `lib/ai-gateway/` (bukan `packages/ai-gateway/`), konsisten dgn deviasi monorepo M0/M1. Kontrak & isolasi provider sudah sesuai ARCH §"packages/ai-gateway owns provider-specific code".
+- [x] **Exit Criteria M4** — generasi AI satu bab lolos Layer A + repair; string consumer-safe.
+  - **TERBUKTI**: `scripts/m4-generation.ts` — 27/27 PASS. Happy path Bab 6 (0 repair, 500–800 kata), reveal gate Bab 12, karakter baru terencana Bab 33, repair menyembuhkan MAJOR (1 attempt), provider bandel → FAILED_REVIEW_REQUIRED (2 attempt, draft null), schema tolak plan/draft invalid, consumer-safe lolos & tangkap kebocoran, template 50-bab konsisten. `tsc --noEmit` hijau; `eslint` 0 error/0 warning.
 
 ## M5 — Reconciliation + Thread Lifecycle + Layer B ⭐ gate 50 bab
 
