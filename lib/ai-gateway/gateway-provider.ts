@@ -31,34 +31,72 @@ const DEFAULT_MODEL = 'openai/gpt-4.1-mini'
 const TARGET_WORD_LOW = 560
 const TARGET_WORD_HIGH = 760
 
-/**
- * Tentukan "otak" model. Dua mode (dipilih via env):
- *
- *  1) Endpoint OpenAI-compatible KUSTOM — bila `CUSTOM_LLM_BASE_URL` diset.
- *     Kredensial: `CUSTOM_LLM_API_KEY` (opsional bila server tak butuh),
- *     model: `NARRATIVE_MODEL` (default 'gpt-4o-mini' untuk endpoint kustom).
- *     Cocok untuk proxy/tunnel pribadi.
- *
- *  2) Vercel AI Gateway (default) — model string 'provider/model' langsung
- *     ke AI SDK; butuh AI_GATEWAY_API_KEY.
- *
- * Mengembalikan pasangan {model, label} agar `name` provider informatif.
- */
-function resolveModel(optModel?: string): { model: LanguageModel; label: string } {
+/** Satu kandidat "otak" dalam rantai fallback. */
+type ModelCandidate = { model: LanguageModel; label: string }
+
+// Default model OpenRouter: primary GRATIS berkualitas naratif terbaik →
+// fallback berbayar sangat murah. Fallback antar-model ditangani OpenRouter
+// sendiri lewat param `models` (array), dalam satu request.
+const OPENROUTER_FREE_DEFAULT = 'nousresearch/hermes-3-llama-3.1-405b:free'
+const OPENROUTER_PAID_DEFAULT = 'deepseek/deepseek-v3.2'
+
+/** Kandidat endpoint OpenAI-compatible kustom (tunnel/proxy pribadi). */
+function customCandidate(optModel?: string): ModelCandidate | null {
   const baseURL = process.env.CUSTOM_LLM_BASE_URL?.trim()
+  if (!baseURL) return null
+  const modelId = optModel ?? process.env.NARRATIVE_MODEL ?? 'gpt-4o-mini'
+  const custom = createOpenAICompatible({
+    name: 'custom',
+    baseURL,
+    apiKey: process.env.CUSTOM_LLM_API_KEY,
+  })
+  return { model: custom(modelId), label: `custom:${modelId}` }
+}
 
-  if (baseURL) {
-    const modelId = optModel ?? process.env.NARRATIVE_MODEL ?? 'gpt-4o-mini'
-    const custom = createOpenAICompatible({
-      name: 'custom',
-      baseURL,
-      apiKey: process.env.CUSTOM_LLM_API_KEY,
-    })
-    return { model: custom(modelId), label: `custom:${modelId}` }
+/**
+ * Kandidat OpenRouter (juga OpenAI-compatible). Memakai fitur array `models`
+ * OpenRouter: dikirim [gratis, berbayar] dan OpenRouter otomatis pindah ke
+ * model berikut bila yang pertama error/kena rate-limit — semua dalam satu
+ * request. Model bisa dioverride via `OPENROUTER_MODELS` (dipisah koma).
+ */
+function openRouterCandidate(): ModelCandidate | null {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim()
+  if (!apiKey) return null
+
+  const models = (process.env.OPENROUTER_MODELS?.trim()
+    ? process.env.OPENROUTER_MODELS.split(',').map((s) => s.trim()).filter(Boolean)
+    : [OPENROUTER_FREE_DEFAULT, OPENROUTER_PAID_DEFAULT])
+
+  const openrouter = createOpenAICompatible({
+    name: 'openrouter',
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey,
+    // Suntik param non-standar `models` (fallback bawaan OpenRouter) ke body.
+    transformRequestBody: (args) => ({ ...args, models }),
+  })
+  // `model` utama = model pertama; `models` array mengatur urutan fallback.
+  return { model: openrouter(models[0]), label: `openrouter:${models.join('|')}` }
+}
+
+/**
+ * Bangun RANTAI model berurutan (fallback bila satu gagal). Prioritas:
+ *   1) Endpoint kustom (tunnel) — bila `CUSTOM_LLM_BASE_URL` diset.
+ *   2) OpenRouter — bila `OPENROUTER_API_KEY` diset (internalnya juga fallback
+ *      gratis→berbayar via array `models`).
+ *   3) Vercel AI Gateway (model string) sebagai jaring terakhir.
+ * generateProse mencoba tiap kandidat berurutan sampai ada yang berhasil.
+ */
+function resolveModelChain(optModel?: string): ModelCandidate[] {
+  const chain: ModelCandidate[] = []
+  const custom = customCandidate(optModel)
+  if (custom) chain.push(custom)
+  const or = openRouterCandidate()
+  if (or) chain.push(or)
+  if (chain.length === 0) {
+    const modelId = optModel ?? process.env.NARRATIVE_MODEL ?? DEFAULT_MODEL
+    chain.push({ model: modelId, label: `gateway:${modelId}` })
   }
-
-  const modelId = optModel ?? process.env.NARRATIVE_MODEL ?? DEFAULT_MODEL
-  return { model: modelId, label: `gateway:${modelId}` }
+  return chain
 }
 
 /** Skema prosa yang diminta dari model — hanya konten naratif untuk pembaca. */
@@ -189,34 +227,46 @@ function buildPrompt(args: {
  * (fallback aman ditangani pemanggil bila perlu).
  */
 async function generateProse(args: {
-  model: LanguageModel
+  chain: ModelCandidate[]
   snapshot: CanonSnapshot
   plan: Record<string, unknown>
   repairFindings?: Finding[]
-}): Promise<{ title: string; paragraphs: string[] }> {
+}): Promise<{ title: string; paragraphs: string[]; usedModel: string }> {
   const { system, prompt } = buildPrompt(args)
+  let lastError: unknown
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    // Pakai streamText (bukan generateText): banyak endpoint OpenAI-compatible
-    // (termasuk proxy/tunnel) SELALU membalas SSE streaming meski diminta
-    // non-stream, sehingga parser non-stream gagal. streamText mem-parse SSE;
-    // kita cukup menunggu `text` (agregat penuh) rampung.
-    const result = streamText({
-      model: args.model,
-      system,
-      prompt:
-        attempt === 0
-          ? prompt
-          : `${prompt}\n\nCATATAN: revisi sebelumnya memuat istilah teknis terlarang. Tulis ulang murni sebagai narasi cerita.`,
-    })
-    const text = await result.text
-    const { title, paragraphs } = parseProse(text)
-    const blob = [title, ...paragraphs].join('\n')
-    if (scanForLeaks(blob).length === 0) {
-      return { title, paragraphs }
+  // Rantai fallback: coba tiap kandidat model berurutan. Kegagalan (error
+  // jaringan/HTTP maupun kebocoran istilah internal setelah repair) memicu
+  // pindah ke kandidat berikutnya.
+  for (const { model, label } of args.chain) {
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        // Pakai streamText (bukan generateText): banyak endpoint
+        // OpenAI-compatible (termasuk proxy/tunnel & OpenRouter) SELALU membalas
+        // SSE streaming meski diminta non-stream, sehingga parser non-stream
+        // gagal. streamText mem-parse SSE; kita cukup menunggu `text` rampung.
+        const result = streamText({
+          model,
+          system,
+          prompt:
+            attempt === 0
+              ? prompt
+              : `${prompt}\n\nCATATAN: revisi sebelumnya memuat istilah teknis terlarang. Tulis ulang murni sebagai narasi cerita.`,
+        })
+        const text = await result.text
+        const { title, paragraphs } = parseProse(text)
+        const blob = [title, ...paragraphs].join('\n')
+        if (scanForLeaks(blob).length === 0) {
+          return { title, paragraphs, usedModel: label }
+        }
+      }
+      lastError = new Error(`gateway-provider: prosa dari ${label} bocor istilah internal setelah 2 percobaan.`)
+    } catch (err) {
+      lastError = err
+      console.log(`[v0] gateway-provider: kandidat ${label} gagal, mencoba fallback berikutnya:`, (err as Error)?.message)
     }
   }
-  throw new Error('gateway-provider: prosa LLM memuat istilah internal setelah 2 percobaan.')
+  throw lastError ?? new Error('gateway-provider: semua kandidat model gagal.')
 }
 
 /**
@@ -225,10 +275,10 @@ async function generateProse(args: {
  */
 export function createGatewayProvider(opts: ProseModel = {}): GenerationProvider {
   const base = createDeterministicProvider()
-  const { model, label } = resolveModel(opts.model)
+  const chain = resolveModelChain(opts.model)
 
   return {
-    name: label,
+    name: chain.map((c) => c.label).join(' → '),
 
     // Plan tetap canon-derived (aman); model tidak menyentuh logika reveal/state.
     generatePlan(input: PlanInput): Promise<unknown> {
@@ -239,9 +289,9 @@ export function createGatewayProvider(opts: ProseModel = {}): GenerationProvider
       // 1) Scaffold canon-safe (semua metadata terstruktur & sinyal Layer B).
       const scaffold = (await base.writeChapter(input)) as Record<string, unknown>
 
-      // 2) Prosa nyata dari LLM.
+      // 2) Prosa nyata dari LLM (dengan rantai fallback).
       const { title, paragraphs } = await generateProse({
-        model,
+        chain,
         snapshot: input.snapshot,
         plan: input.plan as Record<string, unknown>,
         repairFindings: input.repairFindings,
