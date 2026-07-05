@@ -79,6 +79,23 @@ export async function publishChapter(
   return data as PublishResult
 }
 
+/**
+ * Lepas lease pada jalur generasi GAGAL (FAILED_REVIEW_REQUIRED) agar retry
+ * tidak terblokir hingga TTL habis. Jalur SUKSES melepas lease di dalam
+ * publish_chapter (transaksional), jadi ini hanya untuk kegagalan/pembatalan.
+ */
+export async function releaseGenerationLease(args: {
+  storyId: string
+  leaseId: string
+}): Promise<void> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.rpc('release_generation_lease', {
+    p_story_id: args.storyId,
+    p_lease_id: args.leaseId,
+  })
+  if (error) throw new Error(`releaseGenerationLease: ${error.message}`)
+}
+
 /** Baca event terurut untuk sebuah story (observability/debug). */
 export async function listStoryEvents(storyId: string) {
   const supabase = createAdminClient()

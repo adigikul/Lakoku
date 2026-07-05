@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server'
 import { generateNextChapter } from '@/lib/runtime/fake-generation'
+import { generateNextChapterReal } from '@/lib/runtime/story-generation'
 
 /**
- * Endpoint runtime (M2): memicu fake generation workflow untuk satu bab.
- * Ini permukaan INTERNAL/operasional, bukan endpoint pembaca. Dijaga token
+ * Endpoint runtime: memicu workflow generasi satu bab.
+ * Permukaan INTERNAL/operasional (bukan endpoint pembaca). Dijaga token
  * internal (RUNTIME_ADMIN_TOKEN) bila diset; tanpa token, ditolak di produksi.
+ *
+ * Body:
+ *   - chapterNumber: number (wajib, >= 1)
+ *   - mode?: 'real' | 'fake'  (default 'real' — jalur cerita AI tervalidasi;
+ *     'fake' = fixture deterministik M2 untuk uji lifecycle murni)
  *
  * Idempoten: memanggil ulang untuk (story, chapter) yang sama tidak
  * menduplikasi bab (dijaga idempotency key + RPC atomik).
@@ -25,6 +31,7 @@ export async function POST(
     const { id } = await params
     const body = (await req.json().catch(() => ({}))) as {
       chapterNumber?: number
+      mode?: 'real' | 'fake'
     }
     const n = Number(body.chapterNumber)
     if (!Number.isInteger(n) || n < 1) {
@@ -34,10 +41,21 @@ export async function POST(
       )
     }
 
-    const result = await generateNextChapter(id, n)
+    const mode = body.mode === 'fake' ? 'fake' : 'real'
+    const result =
+      mode === 'fake'
+        ? await generateNextChapter(id, n)
+        : await generateNextChapterReal(id, n)
+
     if (!result.ok) {
-      const status = result.reason === 'LEASE_HELD' ? 409 : 409
-      return NextResponse.json({ ok: false, reason: result.reason }, { status })
+      // LEASE_HELD/CHAPTER_EXISTS/FAILED_REVIEW_REQUIRED → konflik/tak-dapat-diproses.
+      const status =
+        result.reason === 'FAILED_REVIEW_REQUIRED'
+          ? 422
+          : result.reason === 'CANON_MISSING'
+            ? 404
+            : 409
+      return NextResponse.json({ ok: false, ...result }, { status })
     }
     return NextResponse.json(result, { status: 201 })
   } catch (err) {
